@@ -31,9 +31,22 @@ return new class extends Migration
             $table->index(['vihara_id', 'year']);
         });
 
-        DB::statement(
-            'create unique index budgets_category_level_unique on budgets (vihara_id, year, type, category) where name is null',
-        );
+        // MySQL doesn't support partial indexes. Use a driver-specific path:
+        //   pgsql → partial unique WHERE name IS NULL
+        //   mysql → generated column mapping NULL→'' + plain unique on it
+        $driver = DB::connection()->getDriverName();
+        if ($driver === 'pgsql') {
+            DB::statement(
+                'create unique index budgets_category_level_unique on budgets (vihara_id, year, type, category) where name is null',
+            );
+        } else { // mysql
+            DB::statement(
+                "alter table budgets add column name_lvl varchar(255) generated always as (coalesce(name, '')) stored",
+            );
+            DB::statement(
+                'create unique index budgets_category_level_unique on budgets (vihara_id, year, type, category, name_lvl)',
+            );
+        }
     }
 
     public function down(): void

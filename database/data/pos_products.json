@@ -1,0 +1,2990 @@
+[
+{
+"sku": "CL-0001",
+"name": "CL. Black Forest 20x20",
+"price": 220000,
+"price_gofood": 253000,
+"price_grabfood": 264000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CL-0002",
+"name": "CL. Black Forest uk.15",
+"price": 155000,
+"price_gofood": 178500,
+"price_grabfood": 186000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CL-0003",
+"name": "CL. Black Forest uk.20",
+"price": 210000,
+"price_gofood": 241500,
+"price_grabfood": 252000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CL-0004",
+"name": "CL. Cake Mini Campur",
+"price": 85000,
+"price_gofood": 98000,
+"price_grabfood": 102000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CL-0005",
+"name": "CL. Cheese Deluxe uk.20",
+"price": 230000,
+"price_gofood": 264500,
+"price_grabfood": 276000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CL-0006",
+"name": "CL. Coklat Fudge 15x15",
+"price": 160000,
+"price_gofood": 184000,
+"price_grabfood": 192000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CL-0007",
+"name": "CL. Coklat Fudge Imlek uk.15",
+"price": 165000,
+"price_gofood": 190000,
+"price_grabfood": 198000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CL-0008",
+"name": "CL. Coklat Fudge uk.15",
+"price": 155000,
+"price_gofood": 178500,
+"price_grabfood": 186000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CL-0009",
+"name": "CL. Coklat Fudge uk.20",
+"price": 210000,
+"price_gofood": 241500,
+"price_grabfood": 252000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CL-0010",
+"name": "CL. Coklat Truffle 15x15",
+"price": 175000,
+"price_gofood": 201500,
+"price_grabfood": 210000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CL-0011",
+"name": "CL. Fruit Cake 15x15",
+"price": 185000,
+"price_gofood": 213000,
+"price_grabfood": 222000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CL-0012",
+"name": "CL. Fruit Cake uk.15",
+"price": 165000,
+"price_gofood": 190000,
+"price_grabfood": 198000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CL-0013",
+"name": "CL. Fruit Cake uk.20",
+"price": 220000,
+"price_gofood": 253000,
+"price_grabfood": 264000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CL-0014",
+"name": "CL. Lapis Surabaya 10x12",
+"price": 195000,
+"price_gofood": 224500,
+"price_grabfood": 234000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CL-0015",
+"name": "CL. Mocca Cake Uk. 15",
+"price": 155000,
+"price_gofood": 178500,
+"price_grabfood": 186000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CM-0001",
+"name": "CM. Black Forest Slice",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Cake",
+"icon": "🧁"
+},
+{
+"sku": "CM-0002",
+"name": "CM. Coklat Fudge Slice",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Cake",
+"icon": "🧁"
+},
+{
+"sku": "CM-0003",
+"name": "CM. Coklat Truffle Slice",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Cake",
+"icon": "🧁"
+},
+{
+"sku": "CM-0004",
+"name": "CM. Fruit Cake Slice",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Cake",
+"icon": "🧁"
+},
+{
+"sku": "CM-0005",
+"name": "CM. Lapis Surabaya Slice",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Cake",
+"icon": "🧁"
+},
+{
+"sku": "CM-0006",
+"name": "CM. Rainbow Cheese Slice",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Cake",
+"icon": "🧁"
+},
+{
+"sku": "CM-0007",
+"name": "CM. Tiramisu Gelas",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Cake",
+"icon": "🍮"
+},
+{
+"sku": "CR-0001",
+"name": "CR. Banana Cake Slice",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Cake",
+"icon": "🍌"
+},
+{
+"sku": "CR-0002",
+"name": "CR. Big Bang - Bang",
+"price": 95000,
+"price_gofood": 109500,
+"price_grabfood": 114000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CR-0003",
+"name": "CR. Bolu Medan Keju",
+"price": 115000,
+"price_gofood": 132500,
+"price_grabfood": 138000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CR-0004",
+"name": "CR. Bolu Medan Keju Slice",
+"price": 18000,
+"price_gofood": 21000,
+"price_grabfood": 22000,
+"category": "Cake",
+"icon": "🧁"
+},
+{
+"sku": "CR-0005",
+"name": "CR. Bolu Medan Mocca Slice",
+"price": 18000,
+"price_gofood": 21000,
+"price_grabfood": 22000,
+"category": "Cake",
+"icon": "🧁"
+},
+{
+"sku": "CR-0006",
+"name": "CR. Bolu Medan Mocha",
+"price": 110000,
+"price_gofood": 126500,
+"price_grabfood": 132000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CR-0007",
+"name": "CR. Bolu Medan Nanas",
+"price": 105000,
+"price_gofood": 121000,
+"price_grabfood": 126000,
+"category": "Cake",
+"icon": "🍍"
+},
+{
+"sku": "CR-0008",
+"name": "CR. Bolu Medan Nanas Slice",
+"price": 17000,
+"price_gofood": 20000,
+"price_grabfood": 20500,
+"category": "Cake",
+"icon": "🍍"
+},
+{
+"sku": "CR-0009",
+"name": "CR. Bolu Medan Strawberry",
+"price": 110000,
+"price_gofood": 126500,
+"price_grabfood": 132000,
+"category": "Cake",
+"icon": "🍓"
+},
+{
+"sku": "CR-0010",
+"name": "CR. Bolu Medan Strawberry Slice",
+"price": 18000,
+"price_gofood": 21000,
+"price_grabfood": 22000,
+"category": "Cake",
+"icon": "🍓"
+},
+{
+"sku": "CR-0011",
+"name": "CR. Brownis",
+"price": 75000,
+"price_gofood": 86500,
+"price_grabfood": 90000,
+"category": "Cake",
+"icon": "🍫"
+},
+{
+"sku": "CR-0012",
+"name": "CR. Brownis Slice",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "Cake",
+"icon": "🍫"
+},
+{
+"sku": "CR-0013",
+"name": "CR. Cake Bread Spc",
+"price": 37000,
+"price_gofood": 43000,
+"price_grabfood": 44500,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CR-0014",
+"name": "CR. Cheese Chiffon",
+"price": 95000,
+"price_gofood": 109500,
+"price_grabfood": 114000,
+"category": "Cake",
+"icon": "🧀"
+},
+{
+"sku": "CR-0015",
+"name": "CR. Choco Cheese Chiffon",
+"price": 98000,
+"price_gofood": 113000,
+"price_grabfood": 118000,
+"category": "Cake",
+"icon": "🍫"
+},
+{
+"sku": "CR-0016",
+"name": "CR. Choco Chiffon",
+"price": 90000,
+"price_gofood": 103500,
+"price_grabfood": 108000,
+"category": "Cake",
+"icon": "🍫"
+},
+{
+"sku": "CR-0017",
+"name": "CR. Lapis Legit Batang Keju",
+"price": 145000,
+"price_gofood": 167000,
+"price_grabfood": 174000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CR-0018",
+"name": "CR. Lapis Legit Batang Original",
+"price": 135000,
+"price_gofood": 155500,
+"price_grabfood": 162000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CR-0019",
+"name": "CR. Lapis Legit Batang Prunes",
+"price": 148000,
+"price_gofood": 170500,
+"price_grabfood": 178000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CR-0020",
+"name": "CR. Lapis Legit Loyang Prunes",
+"price": 195000,
+"price_gofood": 224500,
+"price_grabfood": 234000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CR-0021",
+"name": "CR. Lapis Legit Slice",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Cake",
+"icon": "🧁"
+},
+{
+"sku": "CR-0022",
+"name": "CR. Oatmeal Roll Cake Slice",
+"price": 18000,
+"price_gofood": 21000,
+"price_grabfood": 22000,
+"category": "Cake",
+"icon": "🧁"
+},
+{
+"sku": "CR-0023",
+"name": "CR. Oreo Cheese Cake",
+"price": 98000,
+"price_gofood": 113000,
+"price_grabfood": 118000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CR-0024",
+"name": "CR. Papan Coklat",
+"price": 85000,
+"price_gofood": 98000,
+"price_grabfood": 102000,
+"category": "Cake",
+"icon": "🍫"
+},
+{
+"sku": "CR-0025",
+"name": "CR. Pillow Coklat",
+"price": 45000,
+"price_gofood": 52000,
+"price_grabfood": 54000,
+"category": "Cake",
+"icon": "🍫"
+},
+{
+"sku": "CR-0026",
+"name": "CR. Roll Cake Coklat Panjang",
+"price": 125000,
+"price_gofood": 144000,
+"price_grabfood": 150000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CR-0027",
+"name": "CR. Roll Cake Coklat Panjang Slice",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Cake",
+"icon": "🧁"
+},
+{
+"sku": "CR-0028",
+"name": "CR. Roll Cake Medan Coklat",
+"price": 131000,
+"price_gofood": 151000,
+"price_grabfood": 157500,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CR-0029",
+"name": "CR. Roll Cake Medan Coklat Keju",
+"price": 138000,
+"price_gofood": 159000,
+"price_grabfood": 166000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CR-0030",
+"name": "CR. Roll Cake Medan Keju",
+"price": 131000,
+"price_gofood": 151000,
+"price_grabfood": 157500,
+"category": "Cake",
+"icon": "🧀"
+},
+{
+"sku": "CR-0031",
+"name": "CR. Sifon Bulat",
+"price": 88000,
+"price_gofood": 101500,
+"price_grabfood": 106000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CR-0032",
+"name": "CR. Sweet Pandan",
+"price": 85000,
+"price_gofood": 98000,
+"price_grabfood": 102000,
+"category": "Cake",
+"icon": "🎂"
+},
+{
+"sku": "CR-0033",
+"name": "CR. Tiger Roll Slice",
+"price": 18000,
+"price_gofood": 21000,
+"price_grabfood": 22000,
+"category": "Cake",
+"icon": "🧁"
+},
+{
+"sku": "CS-0001",
+"name": "CS. Castengel Kecil",
+"price": 65000,
+"price_gofood": 75000,
+"price_grabfood": 78000,
+"category": "Cookies",
+"icon": "🍪"
+},
+{
+"sku": "CS-0002",
+"name": "CS. Castengel Midi",
+"price": 95000,
+"price_gofood": 109500,
+"price_grabfood": 114000,
+"category": "Cookies",
+"icon": "🍪"
+},
+{
+"sku": "CS-0003",
+"name": "CS. Nastar Kecil",
+"price": 65000,
+"price_gofood": 75000,
+"price_grabfood": 78000,
+"category": "Cookies",
+"icon": "🍪"
+},
+{
+"sku": "CS-0004",
+"name": "CS. Nastar Midi",
+"price": 95000,
+"price_gofood": 109500,
+"price_grabfood": 114000,
+"category": "Cookies",
+"icon": "🍪"
+},
+{
+"sku": "CS-0005",
+"name": "CS. Putri Salju Kecil",
+"price": 65000,
+"price_gofood": 75000,
+"price_grabfood": 78000,
+"category": "Cookies",
+"icon": "🍪"
+},
+{
+"sku": "NP-0001",
+"name": "NP. Aisha Keranjang Hampers",
+"price": 185000,
+"price_gofood": 213000,
+"price_grabfood": 222000,
+"category": "Cookies",
+"icon": "🎁"
+},
+{
+"sku": "NP-0002",
+"name": "NP. Aisha Mika Hampers",
+"price": 145000,
+"price_gofood": 167000,
+"price_grabfood": 174000,
+"category": "Cookies",
+"icon": "🎁"
+},
+{
+"sku": "NP-0003",
+"name": "NP. Saafea Hampers",
+"price": 165000,
+"price_gofood": 190000,
+"price_grabfood": 198000,
+"category": "Cookies",
+"icon": "🎁"
+},
+{
+"sku": "NP-0004",
+"name": "NP. Shopia Hampers",
+"price": 155000,
+"price_gofood": 178500,
+"price_grabfood": 186000,
+"category": "Cookies",
+"icon": "🎁"
+},
+{
+"sku": "DN-0001",
+"name": "DN. Cheese John",
+"price": 13500,
+"price_gofood": 16000,
+"price_grabfood": 16500,
+"category": "Donat",
+"icon": "🍩"
+},
+{
+"sku": "DN-0002",
+"name": "DN. Donat Coklat",
+"price": 10500,
+"price_gofood": 12500,
+"price_grabfood": 13000,
+"category": "Donat",
+"icon": "🍩"
+},
+{
+"sku": "DN-0003",
+"name": "DN. Donat Coklat Panjang",
+"price": 11500,
+"price_gofood": 13500,
+"price_grabfood": 14000,
+"category": "Donat",
+"icon": "🍩"
+},
+{
+"sku": "DN-0004",
+"name": "DN. Donat Keju",
+"price": 12500,
+"price_gofood": 14500,
+"price_grabfood": 15000,
+"category": "Donat",
+"icon": "🍩"
+},
+{
+"sku": "HB-0001",
+"name": "HB. A.R Almond",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Healthy",
+"icon": "🌾"
+},
+{
+"sku": "HB-0002",
+"name": "HB. A.R Apple",
+"price": 26000,
+"price_gofood": 30000,
+"price_grabfood": 31500,
+"category": "Healthy",
+"icon": "🍎"
+},
+{
+"sku": "HB-0003",
+"name": "HB. A.R Gandum",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Healthy",
+"icon": "🌾"
+},
+{
+"sku": "HB-0004",
+"name": "HB. A.R Walnut",
+"price": 30000,
+"price_gofood": 34500,
+"price_grabfood": 36000,
+"category": "Healthy",
+"icon": "🌰"
+},
+{
+"sku": "HB-0005",
+"name": "HB. Bagget Keju",
+"price": 32000,
+"price_gofood": 37000,
+"price_grabfood": 38500,
+"category": "Healthy",
+"icon": "🥖"
+},
+{
+"sku": "HB-0006",
+"name": "HB. Bagget Panjang Kosong",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Healthy",
+"icon": "🥖"
+},
+{
+"sku": "HB-0007",
+"name": "HB. Cereal",
+"price": 27000,
+"price_gofood": 31500,
+"price_grabfood": 32500,
+"category": "Healthy",
+"icon": "🥣"
+},
+{
+"sku": "HB-0008",
+"name": "HB. Karnels Keju",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Healthy",
+"icon": "🌾"
+},
+{
+"sku": "HB-0009",
+"name": "HB. Orange",
+"price": 26000,
+"price_gofood": 30000,
+"price_grabfood": 31500,
+"category": "Healthy",
+"icon": "🍊"
+},
+{
+"sku": "HB-0010",
+"name": "HB. Royal Gandum",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Healthy",
+"icon": "🌾"
+},
+{
+"sku": "HB-0011",
+"name": "HB. Royal Kismis",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Healthy",
+"icon": "🍇"
+},
+{
+"sku": "HB-0012",
+"name": "HB. Sweet",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Healthy",
+"icon": "🍞"
+},
+{
+"sku": "ML-0001",
+"name": "ML. Sofe Scone",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Healthy",
+"icon": "🍞"
+},
+{
+"sku": "RM-0001",
+"name": "RM. Tawar Red Bean",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Healthy",
+"icon": "🍞"
+},
+{
+"sku": "RT-0001",
+"name": "RT. Tawar Smoke Beef Cheese",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Healthy",
+"icon": "🍞"
+},
+{
+"sku": "K-0001",
+"name": "K. Additional Caramel Sauce",
+"price": 5000,
+"price_gofood": 6000,
+"price_grabfood": 6000,
+"category": "Kopi",
+"icon": "☕"
+},
+{
+"sku": "K-0002",
+"name": "K. Additional Espresso Shot",
+"price": 8000,
+"price_gofood": 9500,
+"price_grabfood": 10000,
+"category": "Kopi",
+"icon": "☕"
+},
+{
+"sku": "K-0003",
+"name": "K. Americano",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Kopi",
+"icon": "☕"
+},
+{
+"sku": "K-0004",
+"name": "K. Brewed Tea",
+"price": 18000,
+"price_gofood": 21000,
+"price_grabfood": 22000,
+"category": "Kopi",
+"icon": "🍵"
+},
+{
+"sku": "K-0005",
+"name": "K. Cappucino",
+"price": 30000,
+"price_gofood": 34500,
+"price_grabfood": 36000,
+"category": "Kopi",
+"icon": "☕"
+},
+{
+"sku": "K-0006",
+"name": "K. Caramel Latte",
+"price": 35000,
+"price_gofood": 40500,
+"price_grabfood": 42000,
+"category": "Kopi",
+"icon": "☕"
+},
+{
+"sku": "K-0007",
+"name": "K. Coffee Latte",
+"price": 32000,
+"price_gofood": 37000,
+"price_grabfood": 38500,
+"category": "Kopi",
+"icon": "☕"
+},
+{
+"sku": "K-0008",
+"name": "K. Coffee Mocha",
+"price": 33000,
+"price_gofood": 38000,
+"price_grabfood": 40000,
+"category": "Kopi",
+"icon": "☕"
+},
+{
+"sku": "K-0009",
+"name": "K. Espresso",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Kopi",
+"icon": "☕"
+},
+{
+"sku": "K-0010",
+"name": "K. Espresso Machiato",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Kopi",
+"icon": "☕"
+},
+{
+"sku": "K-0011",
+"name": "K. Flat White",
+"price": 32000,
+"price_gofood": 37000,
+"price_grabfood": 38500,
+"category": "Kopi",
+"icon": "☕"
+},
+{
+"sku": "K-0012",
+"name": "K. Hot Chocolate",
+"price": 30000,
+"price_gofood": 34500,
+"price_grabfood": 36000,
+"category": "Kopi",
+"icon": "🍫"
+},
+{
+"sku": "K-0013",
+"name": "K. Ice Americano",
+"price": 27000,
+"price_gofood": 31500,
+"price_grabfood": 32500,
+"category": "Kopi",
+"icon": "🧊"
+},
+{
+"sku": "K-0014",
+"name": "K. Ice Cappucino",
+"price": 33000,
+"price_gofood": 38000,
+"price_grabfood": 40000,
+"category": "Kopi",
+"icon": "🧊"
+},
+{
+"sku": "K-0015",
+"name": "K. Ice Chocolate",
+"price": 32000,
+"price_gofood": 37000,
+"price_grabfood": 38500,
+"category": "Kopi",
+"icon": "🧊"
+},
+{
+"sku": "K-0016",
+"name": "K. Ice Coffee Latte",
+"price": 35000,
+"price_gofood": 40500,
+"price_grabfood": 42000,
+"category": "Kopi",
+"icon": "🧊"
+},
+{
+"sku": "K-0017",
+"name": "K. Ice Coffee Mocha",
+"price": 36000,
+"price_gofood": 41500,
+"price_grabfood": 43500,
+"category": "Kopi",
+"icon": "🧊"
+},
+{
+"sku": "K-0018",
+"name": "K. Ice Lemon Tea",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Kopi",
+"icon": "🍋"
+},
+{
+"sku": "K-0019",
+"name": "K. Ice Lychee Tea",
+"price": 23000,
+"price_gofood": 26500,
+"price_grabfood": 28000,
+"category": "Kopi",
+"icon": "🧊"
+},
+{
+"sku": "K-0020",
+"name": "K. Ice Shaken Banana Coffee",
+"price": 35000,
+"price_gofood": 40500,
+"price_grabfood": 42000,
+"category": "Kopi",
+"icon": "🍌"
+},
+{
+"sku": "K-0021",
+"name": "K. Kopi Gula Aren",
+"price": 33000,
+"price_gofood": 38000,
+"price_grabfood": 40000,
+"category": "Kopi",
+"icon": "☕"
+},
+{
+"sku": "K-0022",
+"name": "K. Kopi Kakek",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Kopi",
+"icon": "☕"
+},
+{
+"sku": "K-0023",
+"name": "K. Kopi Nenek",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Kopi",
+"icon": "☕"
+},
+{
+"sku": "K-0024",
+"name": "K. Long Black",
+"price": 27000,
+"price_gofood": 31500,
+"price_grabfood": 32500,
+"category": "Kopi",
+"icon": "☕"
+},
+{
+"sku": "K-0025",
+"name": "K. Salted Caramel Latte",
+"price": 36000,
+"price_gofood": 41500,
+"price_grabfood": 43500,
+"category": "Kopi",
+"icon": "☕"
+},
+{
+"sku": "K-0026",
+"name": "K. lo Han Kuo",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Kopi",
+"icon": "🍵"
+},
+{
+"sku": "PL-0001",
+"name": "PL. Chocolate",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Kopi",
+"icon": "🍫"
+},
+{
+"sku": "PL-0002",
+"name": "PL. Tea (English Breakfast/ Earl Grey)",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Kopi",
+"icon": "🍵"
+},
+{
+"sku": "HM-0001",
+"name": "HM. Bika Ambon Besar @15.000",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "Kue Basah",
+"icon": "🍮"
+},
+{
+"sku": "KB-0001",
+"name": "KB. American Mayo",
+"price": 12000,
+"price_gofood": 14000,
+"price_grabfood": 14500,
+"category": "Kue Basah",
+"icon": "🥐"
+},
+{
+"sku": "KB-0002",
+"name": "KB. Arem-Arem",
+"price": 9000,
+"price_gofood": 10500,
+"price_grabfood": 11000,
+"category": "Kue Basah",
+"icon": "🍱"
+},
+{
+"sku": "KB-0003",
+"name": "KB. Chicken Tofu",
+"price": 11000,
+"price_gofood": 13000,
+"price_grabfood": 13500,
+"category": "Kue Basah",
+"icon": "🍢"
+},
+{
+"sku": "KB-0004",
+"name": "KB. Dadar Gulung",
+"price": 8000,
+"price_gofood": 9500,
+"price_grabfood": 10000,
+"category": "Kue Basah",
+"icon": "🥞"
+},
+{
+"sku": "KB-0005",
+"name": "KB. Kroket",
+"price": 10000,
+"price_gofood": 11500,
+"price_grabfood": 12000,
+"category": "Kue Basah",
+"icon": "🥟"
+},
+{
+"sku": "KB-0006",
+"name": "KB. Lapis Beras",
+"price": 9000,
+"price_gofood": 10500,
+"price_grabfood": 11000,
+"category": "Kue Basah",
+"icon": "🍮"
+},
+{
+"sku": "KB-0007",
+"name": "KB. Lemper",
+"price": 8500,
+"price_gofood": 10000,
+"price_grabfood": 10500,
+"category": "Kue Basah",
+"icon": "🍙"
+},
+{
+"sku": "KB-0008",
+"name": "KB. Lemper Medium",
+"price": 11000,
+"price_gofood": 13000,
+"price_grabfood": 13500,
+"category": "Kue Basah",
+"icon": "🍙"
+},
+{
+"sku": "KB-0009",
+"name": "KB. Lumpia Spring Roll",
+"price": 11000,
+"price_gofood": 13000,
+"price_grabfood": 13500,
+"category": "Kue Basah",
+"icon": "🥟"
+},
+{
+"sku": "KB-0010",
+"name": "KB. Mayonnaise Telor",
+"price": 10000,
+"price_gofood": 11500,
+"price_grabfood": 12000,
+"category": "Kue Basah",
+"icon": "🥚"
+},
+{
+"sku": "KB-0011",
+"name": "KB. Onde-Onde",
+"price": 8000,
+"price_gofood": 9500,
+"price_grabfood": 10000,
+"category": "Kue Basah",
+"icon": "🟤"
+},
+{
+"sku": "KB-0012",
+"name": "KB. Pastel Kecil",
+"price": 9000,
+"price_gofood": 10500,
+"price_grabfood": 11000,
+"category": "Kue Basah",
+"icon": "🥟"
+},
+{
+"sku": "KB-0013",
+"name": "KB. Risol Ayam",
+"price": 10000,
+"price_gofood": 11500,
+"price_grabfood": 12000,
+"category": "Kue Basah",
+"icon": "🥟"
+},
+{
+"sku": "KB-0014",
+"name": "KB. Risol Ayam Medium",
+"price": 13000,
+"price_gofood": 15000,
+"price_grabfood": 16000,
+"category": "Kue Basah",
+"icon": "🥟"
+},
+{
+"sku": "KB-0015",
+"name": "KB. Risol Mayo",
+"price": 11000,
+"price_gofood": 13000,
+"price_grabfood": 13500,
+"category": "Kue Basah",
+"icon": "🥟"
+},
+{
+"sku": "KB-0016",
+"name": "KB. Semar Mendem",
+"price": 9000,
+"price_gofood": 10500,
+"price_grabfood": 11000,
+"category": "Kue Basah",
+"icon": "🟤"
+},
+{
+"sku": "KB-0017",
+"name": "KB. Talam Ijo",
+"price": 8000,
+"price_gofood": 9500,
+"price_grabfood": 10000,
+"category": "Kue Basah",
+"icon": "🟢"
+},
+{
+"sku": "LL-0001",
+"name": "LL. Bawang Hitam",
+"price": 45000,
+"price_gofood": 52000,
+"price_grabfood": 54000,
+"category": "Lain-Lain",
+"icon": "🧅"
+},
+{
+"sku": "LL-0002",
+"name": "LL. HM Madu Hutan",
+"price": 85000,
+"price_gofood": 98000,
+"price_grabfood": 102000,
+"category": "Lain-Lain",
+"icon": "🍯"
+},
+{
+"sku": "LL-0003",
+"name": "LL. Madu Hitam",
+"price": 75000,
+"price_gofood": 86500,
+"price_grabfood": 90000,
+"category": "Lain-Lain",
+"icon": "🍯"
+},
+{
+"sku": "LL-0004",
+"name": "LL. Pancake Durian",
+"price": 35000,
+"price_gofood": 40500,
+"price_grabfood": 42000,
+"category": "Lain-Lain",
+"icon": "🥞"
+},
+{
+"sku": "SH-0001",
+"name": "SH. Selai Srikaya",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Lain-Lain",
+"icon": "🍯"
+},
+{
+"sku": "DT-0001",
+"name": "DT. Donat Almond",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Madre",
+"icon": "🍩"
+},
+{
+"sku": "DT-0002",
+"name": "DT. Donat Ayam",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Madre",
+"icon": "🍗"
+},
+{
+"sku": "DT-0003",
+"name": "DT. Donat Kayu Manis",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Madre",
+"icon": "🍩"
+},
+{
+"sku": "DT-0004",
+"name": "DT. Donat Manis",
+"price": 18000,
+"price_gofood": 21000,
+"price_grabfood": 22000,
+"category": "Madre",
+"icon": "🍩"
+},
+{
+"sku": "DT-0005",
+"name": "DT. Donat Strawberry",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Madre",
+"icon": "🍓"
+},
+{
+"sku": "DT-0006",
+"name": "DT. Gandum Kismis+Cheese",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Madre",
+"icon": "🌾"
+},
+{
+"sku": "DT-0007",
+"name": "DT. Mini Sausage",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Madre",
+"icon": "🌭"
+},
+{
+"sku": "DT-0008",
+"name": "DT. Orange Bread",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Madre",
+"icon": "🍊"
+},
+{
+"sku": "DT-0009",
+"name": "DT. Pandan Ubi Ungu",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Madre",
+"icon": "🟣"
+},
+{
+"sku": "DT-0010",
+"name": "DT. Pine Wood Choco",
+"price": 23000,
+"price_gofood": 26500,
+"price_grabfood": 28000,
+"category": "Madre",
+"icon": "🍫"
+},
+{
+"sku": "DT-0011",
+"name": "DT. Pine Wood Flossy Roll",
+"price": 23000,
+"price_gofood": 26500,
+"price_grabfood": 28000,
+"category": "Madre",
+"icon": "🍞"
+},
+{
+"sku": "DT-0012",
+"name": "DT. Star Danish Apple",
+"price": 26000,
+"price_gofood": 30000,
+"price_grabfood": 31500,
+"category": "Madre",
+"icon": "🍎"
+},
+{
+"sku": "DT-0013",
+"name": "DT. Star Danish Blueberry",
+"price": 26000,
+"price_gofood": 30000,
+"price_grabfood": 31500,
+"category": "Madre",
+"icon": "🫐"
+},
+{
+"sku": "DT-0014",
+"name": "DT. Top Peanut Bread",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Madre",
+"icon": "🥜"
+},
+{
+"sku": "MD-0001",
+"name": "MD. Double Choco",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Madre",
+"icon": "🍫"
+},
+{
+"sku": "MD-0002",
+"name": "MD. Banana Choco",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Madre",
+"icon": "🍌"
+},
+{
+"sku": "RG-0001",
+"name": "RG. Brown Braids",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Madre",
+"icon": "🍞"
+},
+{
+"sku": "RG-0002",
+"name": "RG. Chicken Braids",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Madre",
+"icon": "🍗"
+},
+{
+"sku": "RG-0003",
+"name": "RG. Coklat Chip",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Madre",
+"icon": "🍫"
+},
+{
+"sku": "RG-0004",
+"name": "RG. Margaretha",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Madre",
+"icon": "🍞"
+},
+{
+"sku": "RG-0005",
+"name": "RG. Rasin Bun",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Madre",
+"icon": "🍇"
+},
+{
+"sku": "RG-0006",
+"name": "RG. Red Bean",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Madre",
+"icon": "🔴"
+},
+{
+"sku": "RM-0002",
+"name": "RM. Banana Milk",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Madre",
+"icon": "🍌"
+},
+{
+"sku": "RM-0003",
+"name": "RM. Big Milk",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Madre",
+"icon": "🍞"
+},
+{
+"sku": "RM-0004",
+"name": "RM. Chicken Paprika",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Madre",
+"icon": "🍗"
+},
+{
+"sku": "RM-0005",
+"name": "RM. Coklat 3 Brother",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Madre",
+"icon": "🍫"
+},
+{
+"sku": "RM-0006",
+"name": "RM. Coklat Bun",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Madre",
+"icon": "🍫"
+},
+{
+"sku": "RM-0007",
+"name": "RM. Coklat My Love",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Madre",
+"icon": "🍫"
+},
+{
+"sku": "RM-0008",
+"name": "RM. Coklat Soccer",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Madre",
+"icon": "🍫"
+},
+{
+"sku": "RM-0009",
+"name": "RM. Floss Beef",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Madre",
+"icon": "🥩"
+},
+{
+"sku": "RM-0010",
+"name": "RM. Floss Chicken",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Madre",
+"icon": "🍗"
+},
+{
+"sku": "RM-0011",
+"name": "RM. Panda",
+"price": 23000,
+"price_gofood": 26500,
+"price_grabfood": 28000,
+"category": "Madre",
+"icon": "🐼"
+},
+{
+"sku": "RM-0012",
+"name": "RM. Totoro",
+"price": 23000,
+"price_gofood": 26500,
+"price_grabfood": 28000,
+"category": "Madre",
+"icon": "🐭"
+},
+{
+"sku": "RM-0013",
+"name": "RM. Triple Cheese",
+"price": 24000,
+"price_gofood": 28000,
+"price_grabfood": 29000,
+"category": "Madre",
+"icon": "🧀"
+},
+{
+"sku": "NP-0005",
+"name": "NP. Forbs Chocolate Aztec",
+"price": 45000,
+"price_gofood": 52000,
+"price_grabfood": 54000,
+"category": "New Product",
+"icon": "🍫"
+},
+{
+"sku": "NP-0006",
+"name": "NP. Forbs Chocolate Inca",
+"price": 45000,
+"price_gofood": 52000,
+"price_grabfood": 54000,
+"category": "New Product",
+"icon": "🍫"
+},
+{
+"sku": "NP-0007",
+"name": "NP. Forbs Chocolate Maya",
+"price": 45000,
+"price_gofood": 52000,
+"price_grabfood": 54000,
+"category": "New Product",
+"icon": "🍫"
+},
+{
+"sku": "NP-0008",
+"name": "NP. Kentang Goreng Telur Asin",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "New Product",
+"icon": "🍟"
+},
+{
+"sku": "NP-0009",
+"name": "NP. Package Midi A1",
+"price": 55000,
+"price_gofood": 63500,
+"price_grabfood": 66000,
+"category": "New Product",
+"icon": "📦"
+},
+{
+"sku": "NP-0010",
+"name": "NP. Package Midi C1",
+"price": 55000,
+"price_gofood": 63500,
+"price_grabfood": 66000,
+"category": "New Product",
+"icon": "📦"
+},
+{
+"sku": "NP-0011",
+"name": "NP. Package Midi C2",
+"price": 60000,
+"price_gofood": 69000,
+"price_grabfood": 72000,
+"category": "New Product",
+"icon": "📦"
+},
+{
+"sku": "NP-0012",
+"name": "NP. Package Midi C4",
+"price": 75000,
+"price_gofood": 86500,
+"price_grabfood": 90000,
+"category": "New Product",
+"icon": "📦"
+},
+{
+"sku": "JAJA-0001",
+"name": "Jajanan Pasar @Rp 10.000",
+"price": 10000,
+"price_gofood": 11500,
+"price_grabfood": 12000,
+"category": "Konsinyasi",
+"icon": "🍡"
+},
+{
+"sku": "JAJA-0002",
+"name": "Jajanan Pasar @Rp 11.000",
+"price": 11000,
+"price_gofood": 13000,
+"price_grabfood": 13500,
+"category": "Konsinyasi",
+"icon": "🍡"
+},
+{
+"sku": "JAJA-0003",
+"name": "Jajanan Pasar @Rp 14.000",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "Konsinyasi",
+"icon": "🍡"
+},
+{
+"sku": "JAJA-0004",
+"name": "Jajanan Pasar @Rp 17.000",
+"price": 17000,
+"price_gofood": 20000,
+"price_grabfood": 20500,
+"category": "Konsinyasi",
+"icon": "🍡"
+},
+{
+"sku": "JAJA-0005",
+"name": "Jajanan Pasar @Rp 18.000",
+"price": 18000,
+"price_gofood": 21000,
+"price_grabfood": 22000,
+"category": "Konsinyasi",
+"icon": "🍡"
+},
+{
+"sku": "JAJA-0006",
+"name": "Jajanan Pasar @Rp 19.000",
+"price": 19000,
+"price_gofood": 22000,
+"price_grabfood": 23000,
+"category": "Konsinyasi",
+"icon": "🍡"
+},
+{
+"sku": "JAJA-0007",
+"name": "Jajanan Pasar @Rp 20.000",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Konsinyasi",
+"icon": "🍡"
+},
+{
+"sku": "JAJA-0008",
+"name": "Jajanan Pasar @Rp 25.000",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Konsinyasi",
+"icon": "🍡"
+},
+{
+"sku": "JAJA-0009",
+"name": "Jajanan Pasar @Rp 30.000",
+"price": 30000,
+"price_gofood": 34500,
+"price_grabfood": 36000,
+"category": "Konsinyasi",
+"icon": "🍡"
+},
+{
+"sku": "JAJA-0010",
+"name": "Jajanan Pasar @Rp 9.000",
+"price": 9000,
+"price_gofood": 10500,
+"price_grabfood": 11000,
+"category": "Konsinyasi",
+"icon": "🍡"
+},
+{
+"sku": "JAJA-0011",
+"name": "Jajanan Pasar @Rp 9.500",
+"price": 9500,
+"price_gofood": 11000,
+"price_grabfood": 11500,
+"category": "Konsinyasi",
+"icon": "🍡"
+},
+{
+"sku": "DP-0001",
+"name": "DP. Almond Choco Danish",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Pastry",
+"icon": "🥐"
+},
+{
+"sku": "DP-0002",
+"name": "DP. Apple Pie",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Pastry",
+"icon": "🥧"
+},
+{
+"sku": "DP-0003",
+"name": "DP. Beef Pie",
+"price": 24000,
+"price_gofood": 28000,
+"price_grabfood": 29000,
+"category": "Pastry",
+"icon": "🥧"
+},
+{
+"sku": "DP-0004",
+"name": "DP. Blueberry Danish",
+"price": 27000,
+"price_gofood": 31500,
+"price_grabfood": 32500,
+"category": "Pastry",
+"icon": "🫐"
+},
+{
+"sku": "DP-0005",
+"name": "DP. Chicken Pie",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Pastry",
+"icon": "🍗"
+},
+{
+"sku": "DP-0006",
+"name": "DP. Coklat Bun",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "Pastry",
+"icon": "🍫"
+},
+{
+"sku": "DP-0007",
+"name": "DP. Croissant Coklat",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Pastry",
+"icon": "🍫"
+},
+{
+"sku": "DP-0008",
+"name": "DP. Croissant Keju",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Pastry",
+"icon": "🧀"
+},
+{
+"sku": "DP-0009",
+"name": "DP. Croissant Plain",
+"price": 18000,
+"price_gofood": 21000,
+"price_grabfood": 22000,
+"category": "Pastry",
+"icon": "🥐"
+},
+{
+"sku": "DP-0010",
+"name": "DP. Lee Croisant",
+"price": 18000,
+"price_gofood": 21000,
+"price_grabfood": 22000,
+"category": "Pastry",
+"icon": "🥐"
+},
+{
+"sku": "DP-0011",
+"name": "DP. Pastry Almond",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Pastry",
+"icon": "🌰"
+},
+{
+"sku": "DP-0012",
+"name": "DP. Pastry Horn",
+"price": 18000,
+"price_gofood": 21000,
+"price_grabfood": 22000,
+"category": "Pastry",
+"icon": "🥐"
+},
+{
+"sku": "DP-0013",
+"name": "DP. Pisang Molen",
+"price": 12000,
+"price_gofood": 14000,
+"price_grabfood": 14500,
+"category": "Pastry",
+"icon": "🍌"
+},
+{
+"sku": "DP-0014",
+"name": "DP. Roti Cake",
+"price": 37000,
+"price_gofood": 43000,
+"price_grabfood": 44500,
+"category": "Pastry",
+"icon": "🍰"
+},
+{
+"sku": "DP-0015",
+"name": "DP. Tuna Pie",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Pastry",
+"icon": "🐟"
+},
+{
+"sku": "DP-0016",
+"name": "DP. Almond Croissant",
+"price": 32000,
+"price_gofood": 37000,
+"price_grabfood": 38500,
+"category": "Pastry",
+"icon": "🌰"
+},
+{
+"sku": "DP-0017",
+"name": "DP. Bicolor Chocolate Croissant",
+"price": 30000,
+"price_gofood": 34500,
+"price_grabfood": 36000,
+"category": "Pastry",
+"icon": "🍫"
+},
+{
+"sku": "DP-0018",
+"name": "DP. Butter Croissant",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Pastry",
+"icon": "🥐"
+},
+{
+"sku": "DP-0019",
+"name": "DP. Choussons Aux Pommes",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Pastry",
+"icon": "🍎"
+},
+{
+"sku": "DP-0020",
+"name": "DP. Crolen Chicken Mayo",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Pastry",
+"icon": "🍗"
+},
+{
+"sku": "DP-0021",
+"name": "DP. Crolen Pisang Coklat",
+"price": 23000,
+"price_gofood": 26500,
+"price_grabfood": 28000,
+"category": "Pastry",
+"icon": "🍌"
+},
+{
+"sku": "DP-0022",
+"name": "DP. Crolen Pisang Keju",
+"price": 23000,
+"price_gofood": 26500,
+"price_grabfood": 28000,
+"category": "Pastry",
+"icon": "🍌"
+},
+{
+"sku": "DP-0023",
+"name": "DP. Crolen Tuna Mayo",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Pastry",
+"icon": "🐟"
+},
+{
+"sku": "DP-0024",
+"name": "DP. Danish Blueberry Cream Cheese",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Pastry",
+"icon": "🫐"
+},
+{
+"sku": "DP-0025",
+"name": "DP. Danish Caramel Ganache",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Pastry",
+"icon": "🥐"
+},
+{
+"sku": "DP-0026",
+"name": "DP. Danish Cheese Sausage",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Pastry",
+"icon": "🌭"
+},
+{
+"sku": "DP-0027",
+"name": "DP. Danish Green Grapes",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Pastry",
+"icon": "🍇"
+},
+{
+"sku": "DP-0028",
+"name": "DP. Danish Peaches",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Pastry",
+"icon": "🍑"
+},
+{
+"sku": "DP-0029",
+"name": "DP. Danish Strawberry",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Pastry",
+"icon": "🍓"
+},
+{
+"sku": "DP-0030",
+"name": "DP. Pain Au Chocolat",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Pastry",
+"icon": "🍫"
+},
+{
+"sku": "DP-0031",
+"name": "DP. Pain Aux Raisin",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Pastry",
+"icon": "🍇"
+},
+{
+"sku": "DP-0032",
+"name": "DP. Pain Suisse",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Pastry",
+"icon": "🥐"
+},
+{
+"sku": "DP-0033",
+"name": "DP. Triple Cheese Croissant",
+"price": 32000,
+"price_gofood": 37000,
+"price_grabfood": 38500,
+"category": "Pastry",
+"icon": "🧀"
+},
+{
+"sku": "MD-0003",
+"name": "MD. Almond Cheese",
+"price": 16000,
+"price_gofood": 18500,
+"price_grabfood": 19500,
+"category": "RMB",
+"icon": "🌰"
+},
+{
+"sku": "MD-0004",
+"name": "MD. Banana Cheese",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "RMB",
+"icon": "🍌"
+},
+{
+"sku": "MD-0005",
+"name": "MD. Blueberry Cream Cheese",
+"price": 16000,
+"price_gofood": 18500,
+"price_grabfood": 19500,
+"category": "RMB",
+"icon": "🫐"
+},
+{
+"sku": "MD-0006",
+"name": "MD. Strawberry Cream Cheese",
+"price": 16000,
+"price_gofood": 18500,
+"price_grabfood": 19500,
+"category": "RMB",
+"icon": "🍓"
+},
+{
+"sku": "RB-0001",
+"name": "RB. Abon Ayam",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🍞"
+},
+{
+"sku": "RB-0002",
+"name": "RB. Abon Roll Ayam",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "RMB",
+"icon": "🍞"
+},
+{
+"sku": "RB-0003",
+"name": "RB. Abon Roll Sapi",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "RMB",
+"icon": "🍞"
+},
+{
+"sku": "RB-0004",
+"name": "RB. Abon Roll Sapi @40gram",
+"price": 18000,
+"price_gofood": 21000,
+"price_grabfood": 22000,
+"category": "RMB",
+"icon": "🍞"
+},
+{
+"sku": "RB-0005",
+"name": "RB. Abon Sapi",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🍞"
+},
+{
+"sku": "RB-0006",
+"name": "RB. Ai-ai Cheese",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🧀"
+},
+{
+"sku": "RB-0007",
+"name": "RB. Ai-ai Choco",
+"price": 13500,
+"price_gofood": 16000,
+"price_grabfood": 16500,
+"category": "RMB",
+"icon": "🍫"
+},
+{
+"sku": "RB-0008",
+"name": "RB. Banana Split",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🍌"
+},
+{
+"sku": "RB-0009",
+"name": "RB. Banana Split Bulan",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "RMB",
+"icon": "🍌"
+},
+{
+"sku": "RB-0010",
+"name": "RB. Benano Special",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🍞"
+},
+{
+"sku": "RB-0011",
+"name": "RB. Blueberry Jagung",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🫐"
+},
+{
+"sku": "RB-0012",
+"name": "RB. Caramel",
+"price": 11200,
+"price_gofood": 13000,
+"price_grabfood": 13500,
+"category": "RMB",
+"icon": "🍮"
+},
+{
+"sku": "RB-0013",
+"name": "RB. Cheese Antena",
+"price": 13500,
+"price_gofood": 16000,
+"price_grabfood": 16500,
+"category": "RMB",
+"icon": "🧀"
+},
+{
+"sku": "RB-0014",
+"name": "RB. Cheese Love",
+"price": 13500,
+"price_gofood": 16000,
+"price_grabfood": 16500,
+"category": "RMB",
+"icon": "🧀"
+},
+{
+"sku": "RB-0015",
+"name": "RB. Cheese Mambo",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🧀"
+},
+{
+"sku": "RB-0016",
+"name": "RB. Cheese Mexico",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🧀"
+},
+{
+"sku": "RB-0017",
+"name": "RB. Coating Nut",
+"price": 13500,
+"price_gofood": 16000,
+"price_grabfood": 16500,
+"category": "RMB",
+"icon": "🥜"
+},
+{
+"sku": "RB-0018",
+"name": "RB. Coconut Lover",
+"price": 13000,
+"price_gofood": 15000,
+"price_grabfood": 16000,
+"category": "RMB",
+"icon": "🥥"
+},
+{
+"sku": "RB-0019",
+"name": "RB. Coklat Bar",
+"price": 13500,
+"price_gofood": 16000,
+"price_grabfood": 16500,
+"category": "RMB",
+"icon": "🍫"
+},
+{
+"sku": "RB-0020",
+"name": "RB. Coklat Bun",
+"price": 13000,
+"price_gofood": 15000,
+"price_grabfood": 16000,
+"category": "RMB",
+"icon": "🍫"
+},
+{
+"sku": "RB-0021",
+"name": "RB. Coklat Chips",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🍫"
+},
+{
+"sku": "RB-0022",
+"name": "RB. Coklat Coffee",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "☕"
+},
+{
+"sku": "RB-0023",
+"name": "RB. Coklat Coffee @40gram",
+"price": 17000,
+"price_gofood": 20000,
+"price_grabfood": 20500,
+"category": "RMB",
+"icon": "☕"
+},
+{
+"sku": "RB-0024",
+"name": "RB. Coklat Keju Special",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🧀"
+},
+{
+"sku": "RB-0025",
+"name": "RB. Coklat Spesial",
+"price": 13700,
+"price_gofood": 16000,
+"price_grabfood": 16500,
+"category": "RMB",
+"icon": "🍫"
+},
+{
+"sku": "RB-0026",
+"name": "RB. Coklat Zebra",
+"price": 13500,
+"price_gofood": 16000,
+"price_grabfood": 16500,
+"category": "RMB",
+"icon": "🍫"
+},
+{
+"sku": "RB-0027",
+"name": "RB. Crepes Beef",
+"price": 16000,
+"price_gofood": 18500,
+"price_grabfood": 19500,
+"category": "RMB",
+"icon": "🥩"
+},
+{
+"sku": "RB-0028",
+"name": "RB. Crepes Chicken",
+"price": 16000,
+"price_gofood": 18500,
+"price_grabfood": 19500,
+"category": "RMB",
+"icon": "🍗"
+},
+{
+"sku": "RB-0029",
+"name": "RB. Crepes Coklat Keju",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "RMB",
+"icon": "🍫"
+},
+{
+"sku": "RB-0030",
+"name": "RB. Crepes Pisang Coklat",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "RMB",
+"icon": "🍌"
+},
+{
+"sku": "RB-0031",
+"name": "RB. Crepes Tuna",
+"price": 16000,
+"price_gofood": 18500,
+"price_grabfood": 19500,
+"category": "RMB",
+"icon": "🐟"
+},
+{
+"sku": "RB-0032",
+"name": "RB. Double Choco Cheese",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🍫"
+},
+{
+"sku": "RB-0033",
+"name": "RB. Golden Cheese",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🧀"
+},
+{
+"sku": "RB-0034",
+"name": "RB. Italian",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🍞"
+},
+{
+"sku": "RB-0035",
+"name": "RB. Long Cheese Bread",
+"price": 11000,
+"price_gofood": 13000,
+"price_grabfood": 13500,
+"category": "RMB",
+"icon": "🧀"
+},
+{
+"sku": "RB-0036",
+"name": "RB. Magic Cheese One",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🧀"
+},
+{
+"sku": "RB-0037",
+"name": "RB. Package Flossix",
+"price": 75000,
+"price_gofood": 86500,
+"price_grabfood": 90000,
+"category": "RMB",
+"icon": "📦"
+},
+{
+"sku": "RB-0038",
+"name": "RB. Paket Abon Roll Isi 6",
+"price": 85000,
+"price_gofood": 98000,
+"price_grabfood": 102000,
+"category": "RMB",
+"icon": "📦"
+},
+{
+"sku": "RB-0039",
+"name": "RB. Pisang Coklat Spc",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🍌"
+},
+{
+"sku": "RB-0040",
+"name": "RB. Pisang Keju Spc",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🍌"
+},
+{
+"sku": "RB-0041",
+"name": "RB. Pizza Blondies",
+"price": 16000,
+"price_gofood": 18500,
+"price_grabfood": 19500,
+"category": "RMB",
+"icon": "🍕"
+},
+{
+"sku": "RB-0042",
+"name": "RB. Pizza Deluxe",
+"price": 17000,
+"price_gofood": 20000,
+"price_grabfood": 20500,
+"category": "RMB",
+"icon": "🍕"
+},
+{
+"sku": "RB-0043",
+"name": "RB. Pizza Deluxe @40gram",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "RMB",
+"icon": "🍕"
+},
+{
+"sku": "RB-0044",
+"name": "RB. Pizza Sosis",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "RMB",
+"icon": "🌭"
+},
+{
+"sku": "RB-0045",
+"name": "RB. Pizza Sosis @40gram",
+"price": 18000,
+"price_gofood": 21000,
+"price_grabfood": 22000,
+"category": "RMB",
+"icon": "🌭"
+},
+{
+"sku": "RB-0046",
+"name": "RB. Rainbow Special",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "RMB",
+"icon": "🌈"
+},
+{
+"sku": "RB-0047",
+"name": "RB. Raisin Mexico",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🍇"
+},
+{
+"sku": "RB-0048",
+"name": "RB. Red Bean",
+"price": 13500,
+"price_gofood": 16000,
+"price_grabfood": 16500,
+"category": "RMB",
+"icon": "🔴"
+},
+{
+"sku": "RB-0049",
+"name": "RB. Sapsay Beef",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "RMB",
+"icon": "🥩"
+},
+{
+"sku": "RB-0050",
+"name": "RB. Sapsay Chicken",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "RMB",
+"icon": "🍗"
+},
+{
+"sku": "RB-0051",
+"name": "RB. Sapsay Tuna",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "RMB",
+"icon": "🐟"
+},
+{
+"sku": "RB-0052",
+"name": "RB. Sisir",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "RMB",
+"icon": "🍞"
+},
+{
+"sku": "RB-0053",
+"name": "RB. Sisir Pandan",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "RMB",
+"icon": "🟢"
+},
+{
+"sku": "RB-0054",
+"name": "RB. Smoke Beef Keju Almond",
+"price": 16000,
+"price_gofood": 18500,
+"price_grabfood": 19500,
+"category": "RMB",
+"icon": "🥩"
+},
+{
+"sku": "RB-0055",
+"name": "RB. Sosis Arigano",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🌭"
+},
+{
+"sku": "RB-0056",
+"name": "RB. Sosis Arigano @40gram",
+"price": 17000,
+"price_gofood": 20000,
+"price_grabfood": 20500,
+"category": "RMB",
+"icon": "🌭"
+},
+{
+"sku": "RB-0057",
+"name": "RB. Sosis Keju Spc",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "RMB",
+"icon": "🌭"
+},
+{
+"sku": "RB-0058",
+"name": "RB. Sosis Roll",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🌭"
+},
+{
+"sku": "RB-0059",
+"name": "RB. Srikaya Pandan",
+"price": 13500,
+"price_gofood": 16000,
+"price_grabfood": 16500,
+"category": "RMB",
+"icon": "🟢"
+},
+{
+"sku": "RB-0060",
+"name": "RB. Susu Mexico",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🥛"
+},
+{
+"sku": "RB-0061",
+"name": "RB. Triple Sweet",
+"price": 14000,
+"price_gofood": 16500,
+"price_grabfood": 17000,
+"category": "RMB",
+"icon": "🍞"
+},
+{
+"sku": "RB-0062",
+"name": "RB. Tuna Bowl",
+"price": 15000,
+"price_gofood": 17500,
+"price_grabfood": 18000,
+"category": "RMB",
+"icon": "🐟"
+},
+{
+"sku": "RL-0001",
+"name": "RL. Baso",
+"price": 12000,
+"price_gofood": 14000,
+"price_grabfood": 14500,
+"category": "RML",
+"icon": "🍞"
+},
+{
+"sku": "RL-0002",
+"name": "RL. Coklat",
+"price": 12000,
+"price_gofood": 14000,
+"price_grabfood": 14500,
+"category": "RML",
+"icon": "🍫"
+},
+{
+"sku": "RL-0003",
+"name": "RL. Coklat Keju",
+"price": 13000,
+"price_gofood": 15000,
+"price_grabfood": 16000,
+"category": "RML",
+"icon": "🍫"
+},
+{
+"sku": "RL-0004",
+"name": "RL. Coklat Keju @40gram",
+"price": 16000,
+"price_gofood": 18500,
+"price_grabfood": 19500,
+"category": "RML",
+"icon": "🍫"
+},
+{
+"sku": "RL-0005",
+"name": "RL. Keju",
+"price": 12500,
+"price_gofood": 14500,
+"price_grabfood": 15000,
+"category": "RML",
+"icon": "🧀"
+},
+{
+"sku": "RL-0006",
+"name": "RL. Kelapa",
+"price": 11500,
+"price_gofood": 13500,
+"price_grabfood": 14000,
+"category": "RML",
+"icon": "🥥"
+},
+{
+"sku": "RL-0007",
+"name": "RL. Kismis",
+"price": 12000,
+"price_gofood": 14000,
+"price_grabfood": 14500,
+"category": "RML",
+"icon": "🍇"
+},
+{
+"sku": "RL-0008",
+"name": "RL. Manis Kosong",
+"price": 10500,
+"price_gofood": 12500,
+"price_grabfood": 13000,
+"category": "RML",
+"icon": "🍞"
+},
+{
+"sku": "RL-0009",
+"name": "RL. Milk Six Mocca",
+"price": 13000,
+"price_gofood": 15000,
+"price_grabfood": 16000,
+"category": "RML",
+"icon": "☕"
+},
+{
+"sku": "RL-0010",
+"name": "RL. Milk Six Pandan",
+"price": 13000,
+"price_gofood": 15000,
+"price_grabfood": 16000,
+"category": "RML",
+"icon": "🟢"
+},
+{
+"sku": "RL-0011",
+"name": "RL. Pisang Coklat",
+"price": 12500,
+"price_gofood": 14500,
+"price_grabfood": 15000,
+"category": "RML",
+"icon": "🍌"
+},
+{
+"sku": "RL-0012",
+"name": "RL. Pisang Keju",
+"price": 12500,
+"price_gofood": 14500,
+"price_grabfood": 15000,
+"category": "RML",
+"icon": "🍌"
+},
+{
+"sku": "RL-0013",
+"name": "RL. Polo Taiwan",
+"price": 13000,
+"price_gofood": 15000,
+"price_grabfood": 16000,
+"category": "RML",
+"icon": "🍞"
+},
+{
+"sku": "RL-0014",
+"name": "RL. Sosis",
+"price": 12500,
+"price_gofood": 14500,
+"price_grabfood": 15000,
+"category": "RML",
+"icon": "🌭"
+},
+{
+"sku": "RL-0015",
+"name": "RL. Srikaya",
+"price": 11500,
+"price_gofood": 13500,
+"price_grabfood": 14000,
+"category": "RML",
+"icon": "🟢"
+},
+{
+"sku": "RL-0016",
+"name": "RL. Stick Coklat",
+"price": 12000,
+"price_gofood": 14000,
+"price_grabfood": 14500,
+"category": "RML",
+"icon": "🍫"
+},
+{
+"sku": "RL-0017",
+"name": "RL. Tiga Rasa",
+"price": 13000,
+"price_gofood": 15000,
+"price_grabfood": 16000,
+"category": "RML",
+"icon": "🍞"
+},
+{
+"sku": "PL-0003",
+"name": "PL. Fanta Ice",
+"price": 18000,
+"price_gofood": 21000,
+"price_grabfood": 22000,
+"category": "Sandwich & Crepes",
+"icon": "🧊"
+},
+{
+"sku": "PL-0004",
+"name": "PL. Muffin Coklat",
+"price": 18000,
+"price_gofood": 21000,
+"price_grabfood": 22000,
+"category": "Sandwich & Crepes",
+"icon": "🧁"
+},
+{
+"sku": "PL-0005",
+"name": "PL. Muffin Keju",
+"price": 18000,
+"price_gofood": 21000,
+"price_grabfood": 22000,
+"category": "Sandwich & Crepes",
+"icon": "🧁"
+},
+{
+"sku": "PL-0006",
+"name": "PL. Muffin Kismis",
+"price": 18000,
+"price_gofood": 21000,
+"price_grabfood": 22000,
+"category": "Sandwich & Crepes",
+"icon": "🧁"
+},
+{
+"sku": "PZ-0001",
+"name": "PZ. Beef Special Slice Pizza",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Sandwich & Crepes",
+"icon": "🍕"
+},
+{
+"sku": "PZ-0002",
+"name": "PZ. Mini Beef Calzone",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Sandwich & Crepes",
+"icon": "🍕"
+},
+{
+"sku": "PZ-0003",
+"name": "PZ. Mini Chicken Calzone",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Sandwich & Crepes",
+"icon": "🍕"
+},
+{
+"sku": "PZ-0004",
+"name": "PZ. Mini Tuna Calzone",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Sandwich & Crepes",
+"icon": "🍕"
+},
+{
+"sku": "PZ-0005",
+"name": "PZ. Stick Chicken Pizza",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Sandwich & Crepes",
+"icon": "🍕"
+},
+{
+"sku": "PZ-0006",
+"name": "PZ. Stick Sausage Pizza",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Sandwich & Crepes",
+"icon": "🌭"
+},
+{
+"sku": "PZ-0007",
+"name": "PZ. Stick Tuna Pizza",
+"price": 20000,
+"price_gofood": 23000,
+"price_grabfood": 24000,
+"category": "Sandwich & Crepes",
+"icon": "🐟"
+},
+{
+"sku": "RG-0007",
+"name": "RG. Tawar Gandum",
+"price": 28000,
+"price_gofood": 32500,
+"price_grabfood": 34000,
+"category": "Tawar",
+"icon": "🌾"
+},
+{
+"sku": "T-0001",
+"name": "T. Tawar Biasa",
+"price": 22000,
+"price_gofood": 25500,
+"price_grabfood": 26500,
+"category": "Tawar",
+"icon": "🍞"
+},
+{
+"sku": "T-0002",
+"name": "T. Tawar Gandum",
+"price": 25000,
+"price_gofood": 29000,
+"price_grabfood": 30000,
+"category": "Tawar",
+"icon": "🌾"
+},
+{
+"sku": "T-0003",
+"name": "T. Tawar Kering",
+"price": 23000,
+"price_gofood": 26500,
+"price_grabfood": 28000,
+"category": "Tawar",
+"icon": "🍞"
+},
+{
+"sku": "T-0004",
+"name": "T. Tawar Kupas",
+"price": 16200,
+"price_gofood": 19000,
+"price_grabfood": 19500,
+"category": "Tawar",
+"icon": "🍞"
+},
+{
+"sku": "T-0005",
+"name": "T. Tawar Susu",
+"price": 24000,
+"price_gofood": 28000,
+"price_grabfood": 29000,
+"category": "Tawar",
+"icon": "🥛"
+},
+{
+"sku": "TAW-0001",
+"name": "OASIS MINERAL WATER 600ML",
+"price": 5000,
+"price_gofood": 6000,
+"price_grabfood": 6000,
+"category": "Minuman",
+"icon": "💧"
+},
+{
+"sku": "TAW-0002",
+"name": "OASIS MINERAL WATER 330ML",
+"price": 4000,
+"price_gofood": 5000,
+"price_grabfood": 5000,
+"category": "Minuman",
+"icon": "💧"
+},
+{
+"sku": "TAW-0003",
+"name": "OASIS+ (PH9) 500ml",
+"price": 8000,
+"price_gofood": 9500,
+"price_grabfood": 10000,
+"category": "Minuman",
+"icon": "💧"
+},
+{
+"sku": "TAW-0004",
+"name": "TEH KOTAK ULTRA JAYA 300ML",
+"price": 6000,
+"price_gofood": 7000,
+"price_grabfood": 7500,
+"category": "Minuman",
+"icon": "🍵"
+},
+{
+"sku": "TAW-0005",
+"name": "SUSU ULTRA FRESH MILK 250ML",
+"price": 7500,
+"price_gofood": 9000,
+"price_grabfood": 9000,
+"category": "Minuman",
+"icon": "🥛"
+},
+{
+"sku": "TAW-0006",
+"name": "NU GREEN TEA HONEY",
+"price": 7000,
+"price_gofood": 8500,
+"price_grabfood": 8500,
+"category": "Minuman",
+"icon": "🍵"
+},
+{
+"sku": "TAW-0007",
+"name": "AQUA BOTOL 600 ML",
+"price": 5000,
+"price_gofood": 6000,
+"price_grabfood": 6000,
+"category": "Minuman",
+"icon": "💧"
+},
+{
+"sku": "TAW-0008",
+"name": "NU GREEN TEA ORIGINAL",
+"price": 7000,
+"price_gofood": 8500,
+"price_grabfood": 8500,
+"category": "Minuman",
+"icon": "🍵"
+},
+{
+"sku": "TAW-0009",
+"name": "POCARI SWEAT 350 ML",
+"price": 8500,
+"price_gofood": 10000,
+"price_grabfood": 10500,
+"category": "Minuman",
+"icon": "🥤"
+},
+{
+"sku": "TAW-0010",
+"name": "TEH BOTOL ORIGINAL",
+"price": 6000,
+"price_gofood": 7000,
+"price_grabfood": 7500,
+"category": "Minuman",
+"icon": "🍵"
+},
+{
+"sku": "TAW-0011",
+"name": "TEH KOTAK SOSRO 200ML",
+"price": 5000,
+"price_gofood": 6000,
+"price_grabfood": 6000,
+"category": "Minuman",
+"icon": "🍵"
+},
+{
+"sku": "TAW-0012",
+"name": "TEH KOTAK SOSRO 250ML",
+"price": 5500,
+"price_gofood": 6500,
+"price_grabfood": 7000,
+"category": "Minuman",
+"icon": "🍵"
+}
+]

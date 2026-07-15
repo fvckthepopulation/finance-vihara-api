@@ -9,10 +9,15 @@ return [
         // vihara-finance-web dev
         'http://localhost:3500',
         'http://127.0.0.1:3500',
+        // Production client host
+        'https://vihara-finance.kalyanamittanusantara.com',
     ],
 
-    // Production host TBD — add once deploy target confirmed.
-    'allowed_origins_patterns' => [],
+    // Also allow any *.kalyanamittanusantara.com subdomain (mobile / POS /
+    // yayasan-console may live under other prefixes as the roll-out expands).
+    'allowed_origins_patterns' => [
+        '#^https://[a-z0-9-]+\.kalyanamittanusantara\.com$#i',
+    ],
 
     'allowed_headers' => ['*'],
 

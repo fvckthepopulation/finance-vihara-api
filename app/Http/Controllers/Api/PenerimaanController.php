@@ -71,8 +71,9 @@ class PenerimaanController extends Controller
             // Rekening master vihara — kalau dikirim, destination di-derive
             // dari coa_account_code rekening (override input client).
             'bank_account_id' => ['sometimes', 'nullable', 'integer', 'exists:vihara_bank_accounts,id'],
-            // Tunai default ke 1110 Kas; transfer/auto_credit wajib pilih
-            // rekening (bank_account_id ATAU destination_account_code).
+            // Tunai default ke 1115 Kas Penerimaan Langsung; transfer/
+            // auto_credit wajib pilih rekening (bank_account_id ATAU
+            // destination_account_code).
             'destination_account_code' => [
                 Rule::requiredIf(fn () => $request->input('method') !== 'tunai' && ! $request->filled('bank_account_id')),
                 'nullable', 'exists:accounts,code',
@@ -116,13 +117,15 @@ class PenerimaanController extends Controller
                 ?? \App\Models\Entity::query()->value('id');
         }
         if (empty($data['destination_account_code'])) {
-            $data['destination_account_code'] = '1110'; // Kas — hanya tercapai saat method tunai
+            $data['destination_account_code'] = '1115'; // Kas Penerimaan Langsung — hanya tercapai saat method tunai
         }
 
         PeriodLockService::guard($data['entity_id'], $data['date'], 'date');
 
         if (empty($data['credit_account_code'])) {
-            $data['credit_account_code'] = Penerimaan::CATEGORIES[$data['category']]['default_credit'];
+            // Akun pendapatan mengikuti kanal × pembatasan: 41x0 KM,
+            // 42x0 transfer, 43x0 tunai; suspense tetap 2310.
+            $data['credit_account_code'] = Penerimaan::creditCodeFor($data['category'], $data['method']);
         }
         if ($data['destination_account_code'] === $data['credit_account_code']) {
             return response()->json([
@@ -227,7 +230,9 @@ class PenerimaanController extends Controller
         $entryDate = now()->toDateString();
         PeriodLockService::guard($penerimaan->entity_id, $entryDate, 'date');
 
-        $creditCode = Penerimaan::CATEGORIES[$data['category']]['default_credit'];
+        // Kanal mengikuti penerimaan asal (suspense umumnya transfer bank →
+        // reklasifikasi ke 4210/4220 sesuai spec ISAK 35 v2).
+        $creditCode = Penerimaan::creditCodeFor($data['category'], $penerimaan->method);
         $label = Penerimaan::CATEGORIES[$data['category']]['label'];
 
         $journal = DB::transaction(function () use ($penerimaan, $request, $data, $entryDate, $creditCode, $label) {
@@ -325,7 +330,19 @@ class PenerimaanController extends Controller
     {
         $rows = [];
         foreach (Penerimaan::CATEGORIES as $key => $meta) {
-            $rows[] = ['key' => $key, 'label' => $meta['label'], 'default_credit' => $meta['default_credit']];
+            $rows[] = [
+                'key' => $key,
+                'label' => $meta['label'],
+                'restriction' => $meta['restriction'],
+                // Akun kredit final tergantung kanal — kirim per method
+                // supaya frontend bisa menampilkan akun sesuai pilihan.
+                'default_credit' => Penerimaan::creditCodeFor($key, 'transfer'),
+                'credit_by_method' => [
+                    'auto_credit' => Penerimaan::creditCodeFor($key, 'auto_credit'),
+                    'transfer' => Penerimaan::creditCodeFor($key, 'transfer'),
+                    'tunai' => Penerimaan::creditCodeFor($key, 'tunai'),
+                ],
+            ];
         }
         return response()->json($rows);
     }

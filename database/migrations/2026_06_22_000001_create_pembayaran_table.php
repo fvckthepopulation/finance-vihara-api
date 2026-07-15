@@ -30,6 +30,7 @@ return new class extends Migration
                 'biaya_bhikkhu',
                 'biaya_perayaan',
                 'komisi_platform',
+                'beban_bank',
                 'utang_lain',
                 'biaya_lainnya',
             ]);

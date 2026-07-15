@@ -90,19 +90,20 @@ class KmWebhookTest extends TestCase
         $this->assertSame('posted', $penerimaan->status);
         $this->assertSame('auto_credit', $penerimaan->method);
         $this->assertSame('1160', $penerimaan->destination_account_code);
-        $this->assertSame('4210', $penerimaan->credit_account_code);
+        // COA v2: donasi via KM dengan pembatasan (dana_bhikkhu) → 4120.
+        $this->assertSame('4120', $penerimaan->credit_account_code);
         $this->assertSame('Dana Catupacaya', $penerimaan->name);
         $this->assertSame('KM-DON-26071501', $penerimaan->reference);
         $this->assertNull($penerimaan->created_by_user_id);
         $this->assertNull($penerimaan->posted_by_user_id);
 
-        // JE donasi: Dr 1160 / Kr 4210 sebesar 500.000.
+        // JE donasi: Dr 1160 / Kr 4120 sebesar 500.000.
         $je = JournalEntry::with('lines')->findOrFail($res->json('journal_entry_id'));
         $this->assertSame('posted', $je->status);
         $this->assertNotNull($je->vihara_id);
         $lines = $je->lines->keyBy('account_code');
         $this->assertEqualsWithDelta(500000, (float) $lines['1160']->debit, 0.001);
-        $this->assertEqualsWithDelta(500000, (float) $lines['4210']->credit, 0.001);
+        $this->assertEqualsWithDelta(500000, (float) $lines['4120']->credit, 0.001);
 
         // 2. Donasi kedua — nama TIDAK terdaftar → tetap diterima, name_matched false.
         $res2 = $this->postJson('/api/webhooks/km/donations/paid', $this->donationPayload([

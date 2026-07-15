@@ -28,11 +28,11 @@ class PettyCashMovement extends Model
      * akun beban (operator boleh override).
      */
     public const CATEGORIES = [
-        'operasional' => ['label' => 'Keperluan Operasional', 'default_counterpart' => '5110'],
-        'paramita'    => ['label' => 'Keperluan Paramita',    'default_counterpart' => '5120'],
-        'bhikkhu'     => ['label' => 'Keperluan Bhikkhu',     'default_counterpart' => '5210'],
-        'perayaan'    => ['label' => 'Keperluan Perayaan',    'default_counterpart' => '5220'],
-        'lainnya'     => ['label' => 'Lainnya',               'default_counterpart' => '5110'],
+        'operasional' => ['label' => 'Keperluan Operasional', 'default_counterpart' => '6100'],
+        'paramita'    => ['label' => 'Keperluan Paramita',    'default_counterpart' => '5300'],
+        'bhikkhu'     => ['label' => 'Keperluan Bhikkhu',     'default_counterpart' => '5100'],
+        'perayaan'    => ['label' => 'Keperluan Perayaan',    'default_counterpart' => '5200'],
+        'lainnya'     => ['label' => 'Lainnya',               'default_counterpart' => '6300'],
     ];
 
     public function runPostAction(User $user): void
@@ -117,7 +117,7 @@ class PettyCashMovement extends Model
         return $this->belongsTo(PettyCashPic::class, 'pic_id');
     }
 
-    /** Sumber dana topup; null = dari kas tunai (1110). */
+    /** Sumber dana topup; null = dari kas penerimaan langsung (1115). */
     public function sourceBankAccount(): BelongsTo
     {
         return $this->belongsTo(ViharaBankAccount::class, 'source_bank_account_id');

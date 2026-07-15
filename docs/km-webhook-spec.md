@@ -38,12 +38,16 @@ KM Finance harus mengirim **key kategori milik Vihara Finance** di field
 `category`. Hanya 4 kategori dana yang diizinkan (suspense
 `donasi_belum_teridentifikasi` **tidak** boleh dikirim via webhook):
 
-| Key                | Label                                 | Akun kredit JE |
-| ------------------ | ------------------------------------- | -------------- |
-| `dana_operasional` | Dana Operasional (Tanpa Pembatasan)   | 4110           |
-| `dana_paramita`    | Dana Paramita (Tanpa Pembatasan)      | 4120           |
-| `dana_bhikkhu`     | Dana Bhikkhu (Dengan Pembatasan)      | 4210           |
-| `dana_perayaan`    | Dana Perayaan (Dengan Pembatasan)     | 4220           |
+| Key                | Label                                 | Akun kredit JE                        |
+| ------------------ | ------------------------------------- | ------------------------------------- |
+| `dana_operasional` | Dana Operasional (Tanpa Pembatasan)   | 4110 · Donasi KM — Tanpa Pembatasan   |
+| `dana_paramita`    | Dana Paramita (Tanpa Pembatasan)      | 4110 · Donasi KM — Tanpa Pembatasan   |
+| `dana_bhikkhu`     | Dana Bhikkhu (Dengan Pembatasan)      | 4120 · Donasi KM — Dengan Pembatasan  |
+| `dana_perayaan`    | Dana Perayaan (Dengan Pembatasan)     | 4120 · Donasi KM — Dengan Pembatasan  |
+
+> COA ISAK 35 v2: akun pendapatan donasi = **kanal × pembatasan** (41x0 via
+> KM, 42x0 transfer bank, 43x0 tunai). Semua donasi via webhook memakai kanal
+> KM (41x0); kategori dana menentukan tanpa/dengan pembatasan.
 
 ---
 
@@ -51,7 +55,7 @@ KM Finance harus mengirim **key kategori milik Vihara Finance** di field
 
 Dikirim saat sebuah donasi **berhasil dibayar** di payment gateway KM.
 Vihara Finance otomatis membuat Penerimaan posted:
-**Dr 1160 PG Clearing / Kr 4xxx** (sesuai kategori).
+**Dr 1160 PG Clearing / Kr 4110 (TP) atau 4120 (DP)** sesuai kategori.
 
 ### Payload
 
@@ -114,7 +118,7 @@ dikosongkan dan respons memuat `"name_matched": false`.
 - Penerimaan posted `RCV-YYMMNNN`, method `auto_credit`, tujuan 1160,
   `reference` = `ref`, description `KalyanaMitta | {name} | {donor} | Paid`,
   dibuat oleh sistem (`created_by`/`posted_by` null).
-- Journal entry posted: Dr 1160 / Kr 4xxx sebesar `amount`.
+- Journal entry posted: Dr 1160 / Kr 4110 (TP) atau 4120 (DP) sebesar `amount`.
 - Muncul di Rekonsiliasi PG Clearing sebagai baris **Escrow**.
 
 ### Contoh curl
@@ -242,7 +246,7 @@ curl -s -X POST http://localhost:8500/api/webhooks/km/settlements \
 
 | Event               | Jurnal                                        |
 | ------------------- | --------------------------------------------- |
-| donations/paid      | Dr 1160 PG Clearing 500.000 / Kr 4210 500.000 |
+| donations/paid      | Dr 1160 PG Clearing 500.000 / Kr 4120 500.000 |
 | settlements: komisi | Dr 7140 Komisi 5.000 / Kr 1160 5.000          |
 | settlements: net    | Dr 1130 Bank Donasi 495.000 / Kr 1160 495.000 |
 

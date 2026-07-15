@@ -22,17 +22,20 @@ class Pembayaran extends Model
     protected $table = 'pembayaran';
 
     /**
-     * Kategori pengeluaran vihara — mengikuti COA ISAK 35 (nonprofit).
+     * Kategori pengeluaran vihara — mengikuti COA ISAK 35 v2: beban program
+     * 5xxx (bhikkhu, perayaan, paramita), beban administrasi 6xxx
+     * (operasional, bank, lainnya), fundraising 7xxx (komisi KM).
      * `default_debit` adalah saran akun beban (operator boleh override).
      */
     public const CATEGORIES = [
-        'biaya_operasional' => ['label' => 'Biaya Operasional',            'default_debit' => '5110'],
-        'biaya_paramita'    => ['label' => 'Biaya Paramita',               'default_debit' => '5120'],
-        'biaya_bhikkhu'     => ['label' => 'Biaya Bhikkhu',                'default_debit' => '5210'],
-        'biaya_perayaan'    => ['label' => 'Biaya Perayaan',               'default_debit' => '5220'],
-        'komisi_platform'   => ['label' => 'Beban Komisi Platform KM',     'default_debit' => '7140'],
-        'utang_lain'        => ['label' => 'Pelunasan Utang Lain-lain',    'default_debit' => '2110'],
-        'biaya_lainnya'     => ['label' => 'Biaya Lainnya',                'default_debit' => '5110'],
+        'biaya_operasional' => ['label' => 'Biaya Operasional Vihara',       'default_debit' => '6100'],
+        'biaya_paramita'    => ['label' => 'Biaya Paramita',                 'default_debit' => '5300'],
+        'biaya_bhikkhu'     => ['label' => 'Biaya Bhikkhu / Sangha',         'default_debit' => '5100'],
+        'biaya_perayaan'    => ['label' => 'Biaya Perayaan',                 'default_debit' => '5200'],
+        'komisi_platform'   => ['label' => 'Biaya Platform / Komisi KM',     'default_debit' => '7140'],
+        'beban_bank'        => ['label' => 'Beban Administrasi Bank',        'default_debit' => '6200'],
+        'utang_lain'        => ['label' => 'Pelunasan Utang Vendor Kegiatan', 'default_debit' => '2110'],
+        'biaya_lainnya'     => ['label' => 'Biaya Lainnya',                  'default_debit' => '6300'],
     ];
 
     protected function casts(): array

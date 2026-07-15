@@ -27,7 +27,7 @@ use Illuminate\Validation\Rule;
  *
  * 1. POST /api/webhooks/km/donations/paid — donasi dibayar di KM.
  *    Membuat km_donations + penerimaan posted (method auto_credit,
- *    Dr 1160 PG Clearing / Kr 4xxx sesuai kategori dana).
+ *    Dr 1160 PG Clearing / Kr 4110 (TP) atau 4120 (DP) — donasi via KM).
  * 2. POST /api/webhooks/km/settlements — payout PG ke rekening vihara.
  *    Membuat km_settlements + pembayaran komisi posted (Dr 7140 / Kr 1160)
  *    + JE transfer net (Dr 1130 bank / Kr 1160), lalu menandai donasi settled.
@@ -90,7 +90,7 @@ class KmWebhookController extends Controller
         PeriodLockService::guard($entityId, $bookDate, 'donation.paid_at');
 
         $donation = DB::transaction(function () use ($data, $vihara, $entityId, $rawName, $nameMatched, $paidAt, $bookDate) {
-            $creditCode = Penerimaan::CATEGORIES[$data['category']]['default_credit'];
+            $creditCode = Penerimaan::creditCodeFor($data['category'], 'auto_credit');
             $donorLabel = $data['donor_name'] ?? 'Anonim';
             $nameLabel = $rawName ?? Penerimaan::CATEGORIES[$data['category']]['label'];
             $description = "KalyanaMitta | {$nameLabel} | {$donorLabel} | Paid";

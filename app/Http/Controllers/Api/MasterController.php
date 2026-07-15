@@ -46,8 +46,8 @@ class MasterController extends Controller
 
     /**
      * Bank accounts lookup — virtual master derived from COA. Akun bank/PG
-     * duduk di range 11xx (Aset — Kas & Bank). 1110 (Kas) dan 1120 (Kas
-     * Kecil) skip karena bukan rekening bank.
+     * duduk di range 11xx (Aset — Kas & Bank). 1110 (Kas Kecil) dan 1115
+     * (Kas Penerimaan Langsung) skip karena bukan rekening bank.
      */
     public function bankAccounts(Request $request): JsonResponse
     {
@@ -55,7 +55,7 @@ class MasterController extends Controller
             ->where('active', true)
             ->where('is_header', false)
             ->where('code', 'like', '11%')
-            ->whereNotIn('code', ['1110', '1120']);
+            ->whereNotIn('code', ['1110', '1115']);
         if ($search = $request->string('q')->toString()) {
             $q->where(function ($w) use ($search) {
                 $w->where('name', 'like', "%{$search}%")

@@ -22,17 +22,29 @@ use Illuminate\Support\Facades\DB;
  */
 class LaporanController extends Controller
 {
-    /** Kas & setara kas. */
-    private const KAS = ['1110', '1120', '1130', '1140'];
+    /** Kas & setara kas (COA v2: kas kecil, kas penerimaan, bank ops, bank donasi). */
+    private const KAS = ['1110', '1115', '1120', '1130'];
 
-    /** Pendapatan tanpa pembatasan (TP) / dengan pembatasan (DP). */
-    private const TP_REV = ['4110', '4120'];
-    private const DP_REV = ['4210', '4220'];
+    /**
+     * Pendapatan donasi = kanal × pembatasan (41x0 KM, 42x0 transfer,
+     * 43x0 tunai); digit ke-3 = 1 tanpa pembatasan (TP), 2 dengan (DP).
+     */
+    private const TP_REV = ['4110', '4210', '4310'];
+    private const DP_REV = ['4120', '4220', '4320'];
 
-    /** Kelompok beban (fungsional). */
-    private const BEBAN_PROGRAM = ['5120', '5210', '5220'];
-    private const BEBAN_ADMIN = ['5110'];
-    private const BEBAN_FUNDRAISING = ['7140'];
+    /**
+     * Kelompok beban (fungsional) by prefix COA: 5xxx program (bhikkhu,
+     * perayaan, paramita), 6xxx administrasi & umum, 7xxx fundraising.
+     */
+    private const PREFIX_PROGRAM = '5';
+    private const PREFIX_ADMIN = '6';
+    private const PREFIX_FUNDRAISING = '7';
+
+    /** Aset lancar lainnya (13xx: uang muka kegiatan). */
+    private const PREFIX_ASET_LAIN = '13';
+
+    /** Akun clearing/rekonsiliasi sementara (9xxx) — target saldo Rp0. */
+    private const PREFIX_REKON = '9';
 
     private const LIABILITAS = ['2110', '2310'];
 
@@ -204,7 +216,19 @@ class LaporanController extends Controller
         }
 
         $pgClearing = $cum['1160'] ?? 0.0;
-        $totalAset = $kasTotal + $pgClearing;
+
+        // Aset lancar lainnya (13xx uang muka) + saldo clearing/rekonsiliasi
+        // sementara (9xxx — seharusnya Rp0 setelah rekonsiliasi selesai).
+        $asetLainRows = [];
+        $asetLainTotal = 0.0;
+        foreach ($this->codesWithPrefix($cum, self::PREFIX_ASET_LAIN) as $code) {
+            $bal = $cum[$code];
+            $asetLainTotal += $bal;
+            $asetLainRows[] = ['code' => $code, 'name' => $names[$code] ?? $code, 'balance' => $this->fmt($bal)];
+        }
+        $rekonSementara = $this->sumPrefix($cum, self::PREFIX_REKON);
+
+        $totalAset = $kasTotal + $pgClearing + $asetLainTotal + $rekonSementara;
 
         $liabRows = [];
         $liabTotal = 0.0;
@@ -219,9 +243,9 @@ class LaporanController extends Controller
         [$revTpPeriod, $revDpPeriod] = $this->revenueSplit($period);
 
         $bebanBefore = $this->bebanTotal($before);
-        $bebanProgram = $this->sumCodes($period, self::BEBAN_PROGRAM);
-        $bebanAdmin = $this->sumCodes($period, self::BEBAN_ADMIN);
-        $bebanFundraising = $this->sumCodes($period, self::BEBAN_FUNDRAISING);
+        $bebanProgram = $this->sumPrefix($period, self::PREFIX_PROGRAM);
+        $bebanAdmin = $this->sumPrefix($period, self::PREFIX_ADMIN);
+        $bebanFundraising = $this->sumPrefix($period, self::PREFIX_FUNDRAISING);
         $bebanTotal = $bebanProgram + $bebanAdmin + $bebanFundraising;
 
         // Aset neto: seluruh beban dialokasikan ke TP (praktik mockup —
@@ -242,6 +266,8 @@ class LaporanController extends Controller
             'as_of' => $endD,
             'kas_setara' => ['rows' => $kasRows, 'total' => $this->fmt($kasTotal)],
             'pg_clearing' => $this->fmt($pgClearing),
+            'aset_lainnya' => ['rows' => $asetLainRows, 'total' => $this->fmt($asetLainTotal)],
+            'rekonsiliasi_sementara' => $this->fmt($rekonSementara),
             'total_aset' => $this->fmt($totalAset),
             'liabilitas' => ['rows' => $liabRows, 'total' => $this->fmt($liabTotal)],
             'aset_neto' => [
@@ -273,9 +299,9 @@ class LaporanController extends Controller
         }
 
         $bebanRows = [
-            ['group' => 'program', 'label' => 'Beban Program (Paramita, Bhikkhu, Perayaan)', 'total' => $this->fmt($bebanProgram)],
-            ['group' => 'admin', 'label' => 'Beban Administrasi & Umum', 'total' => $this->fmt($bebanAdmin)],
-            ['group' => 'fundraising', 'label' => 'Beban Komisi Platform KM', 'total' => $this->fmt($bebanFundraising)],
+            ['group' => 'program', 'label' => 'Beban Program (Bhikkhu, Perayaan, Paramita)', 'total' => $this->fmt($bebanProgram)],
+            ['group' => 'admin', 'label' => 'Beban Administrasi & Umum (Operasional, Bank, Lainnya)', 'total' => $this->fmt($bebanAdmin)],
+            ['group' => 'fundraising', 'label' => 'Beban Fundraising (Komisi Platform KM)', 'total' => $this->fmt($bebanFundraising)],
         ];
 
         $penghasilan = [
@@ -320,6 +346,8 @@ class LaporanController extends Controller
                 'kenaikan_dp' => $kenaikanDp,
                 'kas_setara' => $kasTotal,
                 'pg_clearing' => $pgClearing,
+                'aset_lainnya' => $asetLainTotal,
+                'rekonsiliasi_sementara' => $rekonSementara,
                 'total_aset' => $totalAset,
                 'liabilitas' => $liabTotal,
                 'aset_neto_tp' => $akhirTp,
@@ -360,6 +388,8 @@ class LaporanController extends Controller
             'posisi' => [
                 'kas_setara' => $this->fmt($raw['kas_setara']),
                 'pg_clearing' => $this->fmt($raw['pg_clearing']),
+                'aset_lainnya' => $this->fmt($raw['aset_lainnya']),
+                'rekonsiliasi_sementara' => $this->fmt($raw['rekonsiliasi_sementara']),
                 'total_aset' => $this->fmt($raw['total_aset']),
                 'liabilitas' => $this->fmt($raw['liabilitas']),
                 'aset_neto' => [
@@ -435,7 +465,7 @@ class LaporanController extends Controller
     private function arusKas(int|string|null $viharaFilter, string $startD, string $endD, array $before, float $kasAkhirPosisi): array
     {
         $kasList = "'" . implode("','", self::KAS) . "'";
-        $programList = "'" . implode("','", self::BEBAN_PROGRAM) . "'";
+        $programPrefix = self::PREFIX_PROGRAM;
 
         $bucketExpr = "CASE"
             . " WHEN je.reference_type = 'penerimaan' THEN"
@@ -443,7 +473,7 @@ class LaporanController extends Controller
             . " WHEN pn.method = 'auto_credit' THEN 'penerimaan_km_settled'"
             . " ELSE 'penerimaan_transfer' END"
             . " WHEN je.reference_type = 'pembayaran' THEN"
-            . " CASE WHEN pb.debit_account_code IN ({$programList}) THEN 'pembayaran_program'"
+            . " CASE WHEN pb.debit_account_code LIKE '{$programPrefix}%' THEN 'pembayaran_program'"
             . " ELSE 'pembayaran_admin' END"
             . " WHEN je.reference_type IN ('petty_cash', 'petty_cash_movement') THEN 'petty_usage'"
             . " ELSE 'lainnya' END";
@@ -538,16 +568,57 @@ class LaporanController extends Controller
         return [$tp, $dp];
     }
 
-    /** 42xx = pendapatan dengan pembatasan (DP); 4xxx lainnya = TP. */
+    /**
+     * DP = digit ke-3 kode pendapatan '2' (4120/4220/4320 — dengan
+     * pembatasan); digit ke-3 '1' (4110/4210/4310) = TP. Digit ke-2 adalah
+     * kanal (1 KM, 2 transfer, 3 tunai), bukan penanda pembatasan.
+     */
     private function isDpRevenue(string $code): bool
     {
-        return in_array($code, self::DP_REV, true) || str_starts_with($code, '42');
+        return in_array($code, self::DP_REV, true)
+            || (strlen($code) === 4 && $code[0] === '4' && $code[2] === '2');
     }
 
-    /** Total seluruh beban (program + admin + fundraising), debit-normal. */
+    /** Total seluruh beban (program 5xxx + admin 6xxx + fundraising 7xxx), debit-normal. */
     private function bebanTotal(array $net): float
     {
-        return $this->sumCodes($net, array_merge(self::BEBAN_PROGRAM, self::BEBAN_ADMIN, self::BEBAN_FUNDRAISING));
+        return $this->sumPrefix($net, self::PREFIX_PROGRAM)
+            + $this->sumPrefix($net, self::PREFIX_ADMIN)
+            + $this->sumPrefix($net, self::PREFIX_FUNDRAISING);
+    }
+
+    /**
+     * Total net semua akun berawalan prefix.
+     *
+     * @param array<string, float> $net
+     */
+    private function sumPrefix(array $net, string $prefix): float
+    {
+        $sum = 0.0;
+        foreach ($net as $code => $value) {
+            if (str_starts_with((string) $code, $prefix)) {
+                $sum += $value;
+            }
+        }
+
+        return $sum;
+    }
+
+    /**
+     * Kode akun (terurut) di $net yang berawalan prefix.
+     *
+     * @param array<string, float> $net
+     * @return list<string>
+     */
+    private function codesWithPrefix(array $net, string $prefix): array
+    {
+        $codes = array_values(array_filter(
+            array_map('strval', array_keys($net)),
+            fn (string $code) => str_starts_with($code, $prefix),
+        ));
+        sort($codes);
+
+        return $codes;
     }
 
     /** @param array<string, float> $net */

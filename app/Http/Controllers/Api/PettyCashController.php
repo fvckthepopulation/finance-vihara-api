@@ -138,8 +138,8 @@ class PettyCashController extends Controller
 
     /**
      * Kas Kecil per PIC: topup (isi dari bank/kas tunai) atau usage
-     * (pemakaian). Akun kas kecil selalu 1120; counterpart di-derive:
-     * topup → coa rekening sumber (atau 1110 kas tunai), usage → 5110.
+     * (pemakaian). Akun kas kecil selalu 1110; counterpart di-derive:
+     * topup → coa rekening sumber (atau 1115 kas penerimaan), usage → 6100.
      */
     public function store(Request $request): JsonResponse
     {
@@ -148,8 +148,8 @@ class PettyCashController extends Controller
             'pic_id' => ['required', 'integer', 'exists:petty_cash_pics,id'],
             'subtype' => ['required', 'in:topup,usage'],
             'amount' => ['required', 'numeric', 'gt:0'],
-            // Sumber dana topup; null = dari kas tunai (1110). Tidak berlaku
-            // untuk usage.
+            // Sumber dana topup; null = dari kas penerimaan langsung (1115).
+            // Tidak berlaku untuk usage.
             'source_bank_account_id' => [
                 'sometimes', 'nullable', 'integer', 'exists:vihara_bank_accounts,id',
                 'prohibited_if:subtype,usage',
@@ -169,7 +169,7 @@ class PettyCashController extends Controller
             ], 422);
         }
 
-        $counterpart = $data['subtype'] === 'usage' ? '5110' : '1110';
+        $counterpart = $data['subtype'] === 'usage' ? '6100' : '1115';
         if (! empty($data['source_bank_account_id'])) {
             $bankAccount = ViharaBankAccount::find($data['source_bank_account_id']);
             if ((int) $bankAccount->vihara_id !== (int) $viharaId) {
@@ -193,7 +193,7 @@ class PettyCashController extends Controller
             'pic_id' => $pic->id,
             'subtype' => $data['subtype'],
             'source_bank_account_id' => $data['source_bank_account_id'] ?? null,
-            'cash_account_code' => '1120',
+            'cash_account_code' => '1110',
             'type' => $data['subtype'] === 'topup' ? 'refill' : 'expense',
             'movement_date' => $data['date'],
             'amount' => $data['amount'],

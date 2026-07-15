@@ -22,18 +22,42 @@ class Penerimaan extends Model
     protected $table = 'penerimaan';
 
     /**
-     * Kategori penerimaan dana vihara — mengikuti COA ISAK 35 (nonprofit).
-     * Dana tanpa pembatasan: operasional + paramita; dengan pembatasan:
-     * bhikkhu + perayaan. Donasi yang belum jelas peruntukannya masuk
-     * suspense 2310 sampai teridentifikasi.
+     * Kategori penerimaan dana vihara — mengikuti COA ISAK 35 v2.
+     * Dana tanpa pembatasan (TP): operasional + paramita; dengan pembatasan
+     * (DP): bhikkhu + perayaan. Akun kredit TIDAK lagi fix per kategori —
+     * ditentukan kanal penerimaan (method) via creditCodeFor(). Donasi yang
+     * belum jelas peruntukannya masuk suspense 2310 sampai teridentifikasi.
      */
     public const CATEGORIES = [
-        'dana_operasional'   => ['label' => 'Dana Operasional (Tanpa Pembatasan)', 'default_credit' => '4110'],
-        'dana_paramita'      => ['label' => 'Dana Paramita (Tanpa Pembatasan)',    'default_credit' => '4120'],
-        'dana_bhikkhu'       => ['label' => 'Dana Bhikkhu (Dengan Pembatasan)',    'default_credit' => '4210'],
-        'dana_perayaan'      => ['label' => 'Dana Perayaan (Dengan Pembatasan)',   'default_credit' => '4220'],
-        'donasi_belum_teridentifikasi' => ['label' => 'Donasi Belum Teridentifikasi', 'default_credit' => '2310'],
+        'dana_operasional'   => ['label' => 'Dana Operasional (Tanpa Pembatasan)', 'restriction' => 'tp'],
+        'dana_paramita'      => ['label' => 'Dana Paramita (Tanpa Pembatasan)',    'restriction' => 'tp'],
+        'dana_bhikkhu'       => ['label' => 'Dana Bhikkhu (Dengan Pembatasan)',    'restriction' => 'dp'],
+        'dana_perayaan'      => ['label' => 'Dana Perayaan (Dengan Pembatasan)',   'restriction' => 'dp'],
+        'donasi_belum_teridentifikasi' => ['label' => 'Donasi Belum Teridentifikasi', 'restriction' => null, 'default_credit' => '2310'],
     ];
+
+    /** Kanal penerimaan → prefix akun pendapatan donasi (COA 4xxx). */
+    public const CHANNEL_PREFIX = [
+        'auto_credit' => '41', // via platform KM
+        'transfer'    => '42', // transfer bank langsung
+        'tunai'       => '43', // tunai / kotak donasi
+    ];
+
+    /**
+     * Akun kredit penerimaan = kanal × pembatasan: 41x0 KM, 42x0 transfer,
+     * 43x0 tunai; digit ke-3 = 1 (TP) / 2 (DP). Kategori tanpa restriction
+     * (suspense) memakai default_credit tetap (2310).
+     */
+    public static function creditCodeFor(string $category, ?string $method): string
+    {
+        $meta = self::CATEGORIES[$category];
+        if (($meta['restriction'] ?? null) === null) {
+            return $meta['default_credit'];
+        }
+        $prefix = self::CHANNEL_PREFIX[$method] ?? self::CHANNEL_PREFIX['transfer'];
+
+        return $prefix . ($meta['restriction'] === 'dp' ? '2' : '1') . '0';
+    }
 
     protected function casts(): array
     {

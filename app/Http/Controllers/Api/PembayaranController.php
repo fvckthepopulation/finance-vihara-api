@@ -71,8 +71,9 @@ class PembayaranController extends Controller
             // Rekening master vihara — kalau dikirim, source di-derive dari
             // coa_account_code rekening (override input client).
             'bank_account_id' => ['sometimes', 'nullable', 'integer', 'exists:vihara_bank_accounts,id'],
-            // Tunai default ke 1110 Kas; transfer/auto_debit wajib pilih
-            // rekening (bank_account_id ATAU source_account_code).
+            // Tunai default ke 1115 Kas Penerimaan Langsung; transfer/
+            // auto_debit wajib pilih rekening (bank_account_id ATAU
+            // source_account_code).
             'source_account_code' => [
                 Rule::requiredIf(fn () => $request->input('method') !== 'tunai' && ! $request->filled('bank_account_id')),
                 'nullable', 'exists:accounts,code',
@@ -116,7 +117,7 @@ class PembayaranController extends Controller
                 ?? \App\Models\Entity::query()->value('id');
         }
         if (empty($data['source_account_code'])) {
-            $data['source_account_code'] = '1110'; // Kas — hanya tercapai saat method tunai
+            $data['source_account_code'] = '1115'; // Kas Penerimaan Langsung — hanya tercapai saat method tunai
         }
 
         PeriodLockService::guard($data['entity_id'], $data['date'], 'date');

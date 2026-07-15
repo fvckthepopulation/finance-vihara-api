@@ -29,6 +29,10 @@ return new class extends Migration
             $table->string('account_code', 10)->nullable()
                 ->comment('derived = coa_account_code rekening')->change();
 
+            // MySQL FK-index safety: add a standalone index on account_code
+            // BEFORE dropping the composite unique that currently backs the
+            // FK on account_code. Postgres tolerates either order.
+            $table->index('account_code', 'recon_account_code_idx');
             $table->dropUnique('recon_account_period_unique');
             $table->unique(['bank_account_id', 'period_month'], 'recon_bank_period_unique');
         });
@@ -58,6 +62,7 @@ return new class extends Migration
         Schema::table('reconciliation_runs', function (Blueprint $table) {
             $table->dropUnique('recon_bank_period_unique');
             $table->unique(['account_code', 'period_month'], 'recon_account_period_unique');
+            $table->dropIndex('recon_account_code_idx');
             $table->dropConstrainedForeignId('bank_account_id');
             $table->dropConstrainedForeignId('vihara_id');
         });

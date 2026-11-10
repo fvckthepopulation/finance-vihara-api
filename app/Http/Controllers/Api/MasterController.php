@@ -7,6 +7,7 @@ use App\Models\Account;
 use App\Models\Entity;
 use App\Models\Payee;
 use App\Models\TransactionName;
+use App\Services\ViharaScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -38,19 +39,37 @@ class MasterController extends Controller
         $request->validate([
             'type' => ['required', 'in:penerimaan,pengeluaran'],
             'category' => ['sometimes', 'string', 'max:100'],
+            'vihara_id' => ['sometimes', 'integer', 'exists:viharas,id'],
         ]);
+
+        // Item khusus satu vihara tidak boleh bocor ke vihara lain. Kalau
+        // form menyebut vihara transaksinya, daftar dipersempit ke vihara itu
+        // saja (sesudah dipastikan boleh diakses); kalau tidak, dipakai
+        // seluruh vihara yang boleh dilihat pengguna.
+        $viharaIds = ViharaScopeService::readFilterIds($request);
+        if ($request->filled('vihara_id')) {
+            $diminta = $request->integer('vihara_id');
+            ViharaScopeService::guardRecord($request, $diminta);
+            $viharaIds = [$diminta];
+        }
 
         $q = TransactionName::query()
             ->where('active', true)
-            ->where('type', $request->string('type')->toString());
+            ->where('type', $request->string('type')->toString())
+            ->visibleForViharas($viharaIds);
 
         if ($category = $request->string('category')->toString()) {
             $q->where('category', $category);
         }
 
         return response()->json([
-            'data' => $q->orderBy('category')->orderBy('name')
-                ->get(['id', 'type', 'category', 'name']),
+            // LOWER(): urutan basis data (collation C di Postgres produksi)
+            // menaruh seluruh huruf besar sebelum huruf kecil, sehingga item
+            // berhuruf kecil terlempar ke belakang daftar — "Biaya adm Bank"
+            // muncul setelah "Biaya Takjil". Pengurutan tanpa membedakan
+            // besar-kecil membuat posisinya sesuai dugaan pembaca.
+            'data' => $q->orderBy('category')->orderByRaw('LOWER(name)')
+                ->get(['id', 'type', 'category', 'vihara_id', 'name']),
         ]);
     }
 

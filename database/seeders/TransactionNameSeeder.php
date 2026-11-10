@@ -59,11 +59,11 @@ class TransactionNameSeeder extends Seeder
                 'Biaya Wisata Panitia Pabajja',
             ],
             'biaya_operasional' => [
-                'Biaya adm Bank',
+                'Biaya Admin Bank',
                 'Biaya ATK',
                 'Biaya Fang Shen',
                 'Biaya Kendaraan Vihara',
-                'Biaya kep SMB VVG',
+                'Biaya Keperluan SMB VVG',
                 'Biaya Keperluan Baksos',
                 'Biaya Maintenance Vihara',
                 'Biaya Pengadaan Pindapata',
@@ -84,7 +84,7 @@ class TransactionNameSeeder extends Seeder
             ],
             'biaya_perayaan' => [
                 'Biaya 17an',
-                'Biaya Kep Ashada',
+                'Biaya Keperluan Ashada',
                 'Biaya Patidana Ceng Beng',
                 'Biaya Perayaan Imlek',
                 'Biaya Perayaan Kathina',

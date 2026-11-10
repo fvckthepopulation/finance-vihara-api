@@ -96,6 +96,16 @@ class PenerimaanController extends Controller
 
         $data['vihara_id'] = ViharaScopeService::creationViharaId($request);
 
+        // Aturan yang sama dengan Pengeluaran: nama khusus vihara lain
+        // ditolak, bukan sekadar disembunyikan dari dropdown.
+        if (! empty($data['name'])
+            && ! \App\Models\TransactionName::usableForVihara('penerimaan', $data['name'], $data['vihara_id'])) {
+            return response()->json([
+                'message' => "Nama Penerimaan '{$data['name']}' tidak berlaku untuk vihara ini.",
+                'errors' => ['name' => ["Nama Penerimaan '{$data['name']}' tidak berlaku untuk vihara ini."]],
+            ], 422);
+        }
+
         // Rekening bank master: wajib milik vihara transaksi; akun tujuan JE
         // mengikuti coa_account_code rekening.
         if (! empty($data['bank_account_id'])) {
@@ -304,6 +314,12 @@ class PenerimaanController extends Controller
 
     public function uploadAttachment(Request $request, Penerimaan $penerimaan): JsonResponse
     {
+        // Lampiran mengikuti pemilik barisnya. Tanpa penjagaan ini, izin
+        // *.view berlaku lintas vihara: siapa pun yang boleh melihat
+        // modulnya bisa mengunduh bukti milik vihara lain hanya dengan
+        // menebak id — padahal show() baris yang sama menolak 403.
+        ViharaScopeService::guardRecord($request, $penerimaan->vihara_id);
+
         $request->validate([
             'file' => ['required', 'file', 'max:10240', 'mimes:pdf,jpg,jpeg,png'],
         ]);
@@ -316,8 +332,14 @@ class PenerimaanController extends Controller
         return response()->json($penerimaan->fresh(), 201);
     }
 
-    public function downloadAttachment(Penerimaan $penerimaan): StreamedResponse
+    public function downloadAttachment(Request $request, Penerimaan $penerimaan): StreamedResponse
     {
+        // Lampiran mengikuti pemilik barisnya. Tanpa penjagaan ini, izin
+        // *.view berlaku lintas vihara: siapa pun yang boleh melihat
+        // modulnya bisa mengunduh bukti milik vihara lain hanya dengan
+        // menebak id — padahal show() baris yang sama menolak 403.
+        ViharaScopeService::guardRecord($request, $penerimaan->vihara_id);
+
         if (! $penerimaan->attachment_path || ! Storage::disk('local')->exists($penerimaan->attachment_path)) {
             abort(404, 'Tidak ada lampiran untuk penerimaan ini.');
         }

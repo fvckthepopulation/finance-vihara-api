@@ -306,6 +306,12 @@ class PettyCashController extends Controller
     /** Upload nota/struk (satu file per movement; upload baru menggantikan lama). */
     public function uploadAttachment(Request $request, PettyCashMovement $pettyCashMovement): JsonResponse
     {
+        // Lampiran mengikuti pemilik barisnya. Tanpa penjagaan ini, izin
+        // *.view berlaku lintas vihara: siapa pun yang boleh melihat
+        // modulnya bisa mengunduh bukti milik vihara lain hanya dengan
+        // menebak id — padahal show() baris yang sama menolak 403.
+        ViharaScopeService::guardRecord($request, $pettyCashMovement->vihara_id);
+
         $request->validate([
             'file' => ['required', 'file', 'max:10240', 'mimes:pdf,jpg,jpeg,png'],
         ]);
@@ -323,8 +329,14 @@ class PettyCashController extends Controller
         );
     }
 
-    public function downloadAttachment(PettyCashMovement $pettyCashMovement): StreamedResponse
+    public function downloadAttachment(Request $request, PettyCashMovement $pettyCashMovement): StreamedResponse
     {
+        // Lampiran mengikuti pemilik barisnya. Tanpa penjagaan ini, izin
+        // *.view berlaku lintas vihara: siapa pun yang boleh melihat
+        // modulnya bisa mengunduh bukti milik vihara lain hanya dengan
+        // menebak id — padahal show() baris yang sama menolak 403.
+        ViharaScopeService::guardRecord($request, $pettyCashMovement->vihara_id);
+
         if (! $pettyCashMovement->attachment_path || ! Storage::disk('local')->exists($pettyCashMovement->attachment_path)) {
             abort(404, 'Tidak ada nota untuk movement ini.');
         }

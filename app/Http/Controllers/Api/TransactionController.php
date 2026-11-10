@@ -43,6 +43,14 @@ class TransactionController extends Controller
 
         $perPage = min(max($request->integer('per_page') ?: 25, 1), 200);
         $bankLabels = $this->bankLabels();
+        // Nama vihara ikut dikirim: tanpa ini klien hanya punya id, dan tabel
+        // lintas-vihara tidak bisa menunjukkan baris ini milik vihara mana.
+        $viharaNames = \App\Models\Vihara::query()->pluck('name', 'id');
+        // Cadangan label rekening. Baris yang lahir di luar form — mis.
+        // komisi settlement KalyanaMitta — hanya punya kode akun kas/bank,
+        // tanpa bank_account_id. Tanpa cadangan ini kolom Rekening-nya kosong
+        // padahal rekeningnya jelas.
+        $akunKas = \App\Models\Account::query()->pluck('name', 'code');
         $paginator = (clone $wrapped)
             ->orderByDesc('date')->orderByDesc('id')
             ->paginate($perPage)
@@ -62,8 +70,15 @@ class TransactionController extends Controller
                 'reference' => $row->reference,
                 'description' => $row->description,
                 'vihara_id' => $row->vihara_id !== null ? (int) $row->vihara_id : null,
+                'vihara_name' => $row->vihara_id !== null ? ($viharaNames[(int) $row->vihara_id] ?? null) : null,
+                // Klien perlu tahu ADA tidaknya bukti tanpa mengunduhnya.
+                'has_attachment' => (bool) $row->has_attachment,
                 'bank_account_id' => $row->bank_account_id !== null ? (int) $row->bank_account_id : null,
-                'bank_label' => $row->bank_account_id !== null ? ($bankLabels[(int) $row->bank_account_id] ?? null) : null,
+                'bank_label' => $row->bank_account_id !== null
+                    ? ($bankLabels[(int) $row->bank_account_id] ?? null)
+                    : ($row->cash_account_code !== null
+                        ? trim($row->cash_account_code . ' ' . ($akunKas[$row->cash_account_code] ?? ''))
+                        : null),
             ]);
 
         return response()->json($paginator->toArray() + [
@@ -151,7 +166,9 @@ class TransactionController extends Controller
             $p = DB::table('penerimaan')->selectRaw(
                 "id, 'Penerimaan' AS tipe, code, date, name, category, amount, method, "
                 . "CASE WHEN method = 'auto_credit' THEN 'km' ELSE 'manual' END AS source, "
-                . 'status, source_name AS counterparty, reference, description, vihara_id, bank_account_id',
+                . 'status, source_name AS counterparty, reference, description, vihara_id, bank_account_id, '
+                . 'destination_account_code AS cash_account_code, '
+                . 'CASE WHEN attachment_path IS NULL THEN 0 ELSE 1 END AS has_attachment',
             );
             if ($sumber === 'km') {
                 $p->where('method', 'auto_credit');
@@ -164,7 +181,9 @@ class TransactionController extends Controller
         if ($tipe !== 'Penerimaan') {
             $b = DB::table('pembayaran')->selectRaw(
                 "id, 'Pengeluaran' AS tipe, code, date, name, category, amount, method, "
-                . "'manual' AS source, status, payee_name AS counterparty, reference, description, vihara_id, bank_account_id",
+                . "'manual' AS source, status, payee_name AS counterparty, reference, description, vihara_id, bank_account_id, "
+                . 'source_account_code AS cash_account_code, '
+                . 'CASE WHEN attachment_path IS NULL THEN 0 ELSE 1 END AS has_attachment',
             );
             if ($sumber === 'km') {
                 // Semua pengeluaran adalah manual — filter km mengosongkan branch ini.

@@ -68,14 +68,25 @@ class PembayaranController extends Controller
             'method' => ['required', 'in:transfer,tunai,auto_debit'],
             // Rekening master vihara — kalau dikirim, source di-derive dari
             // coa_account_code rekening (override input client).
-            'bank_account_id' => ['sometimes', 'nullable', 'integer', 'exists:vihara_bank_accounts,id'],
+            // Transfer/auto-debit WAJIB menyebut rekening sumber: dari situ
+            // akun kredit jurnal (1120/1130) diturunkan. Boleh lewat
+            // bank_account_id (yang dipakai form) atau source_account_code
+            // (kompat lama) — salah satu cukup, tapi tidak boleh dua-duanya
+            // kosong. Pesannya ditulis eksplisit karena tanpa itu klien hanya
+            // menerima kunci mentah `validation.required` pada field yang
+            // bahkan tidak ada di formnya.
+            'bank_account_id' => [
+                Rule::requiredIf(fn () => $request->input('method') !== 'tunai' && ! $request->filled('source_account_code')),
+                'nullable', 'integer', 'exists:vihara_bank_accounts,id',
+            ],
             // Tunai default ke 1115 Kas Penerimaan Langsung; transfer/
             // auto_debit wajib pilih rekening (bank_account_id ATAU
             // source_account_code).
-            'source_account_code' => [
-                Rule::requiredIf(fn () => $request->input('method') !== 'tunai' && ! $request->filled('bank_account_id')),
-                'nullable', 'exists:accounts,code',
-            ],
+            // Jalur kompat lama. Kewajiban "harus ada rekening" sudah
+            // ditegakkan di bank_account_id di atas, jadi di sini cukup
+            // divalidasi bentuknya — supaya saat dua-duanya kosong pengguna
+            // menerima SATU pesan, bukan dua.
+            'source_account_code' => ['sometimes', 'nullable', 'exists:accounts,code'],
             'category' => ['required', 'in:' . implode(',', array_keys(Pembayaran::CATEGORIES))],
             'name' => [
                 'sometimes', 'nullable', 'string', 'max:255',
@@ -92,9 +103,20 @@ class PembayaranController extends Controller
             'reference' => ['sometimes', 'nullable', 'string', 'max:100'],
             'amount' => ['required', 'numeric', 'gt:0'],
             'description' => ['sometimes', 'nullable', 'string'],
+        ], [
+            'bank_account_id.required' => 'Transfer dari Rekening wajib dipilih.',
         ]);
 
         $data['vihara_id'] = ViharaScopeService::creationViharaId($request);
+
+        // Nama Pengeluaran khusus vihara lain tidak boleh dipakai di sini.
+        if (! empty($data['name'])
+            && ! \App\Models\TransactionName::usableForVihara('pengeluaran', $data['name'], $data['vihara_id'])) {
+            return response()->json([
+                'message' => "Nama Pengeluaran '{$data['name']}' tidak berlaku untuk vihara ini.",
+                'errors' => ['name' => ["Nama Pengeluaran '{$data['name']}' tidak berlaku untuk vihara ini."]],
+            ], 422);
+        }
 
         // Rekening bank master: wajib milik vihara transaksi; akun sumber JE
         // mengikuti coa_account_code rekening.
@@ -109,8 +131,17 @@ class PembayaranController extends Controller
             $data['source_account_code'] = $bankAccount->coa_account_code;
         }
 
-        // Single-entity setup (YDI) — default dari user, fallback entity pertama.
-        if (empty($data['entity_id'])) {
+        // Yayasan MENGIKUTI vihara transaksi, bukan yayasan si pengguna.
+        // Tanpa ini, admin lintas yayasan yang mencatat untuk vihara di
+        // yayasan lain menyimpan baris ber-entity_id miliknya sendiri — dan
+        // PeriodLockService di bawah pun memeriksa kunci periode yayasan yang
+        // keliru. Vihara adalah sumber kebenarannya; entity_id dari klien
+        // sengaja diabaikan bila bertentangan.
+        $viharaEntityId = \App\Models\Vihara::whereKey($data['vihara_id'])->value('entity_id');
+        if ($viharaEntityId !== null) {
+            $data['entity_id'] = (int) $viharaEntityId;
+        } elseif (empty($data['entity_id'])) {
+            // Vihara lama yang belum terhubung ke yayasan mana pun.
             $data['entity_id'] = $request->user()->entity_id
                 ?? \App\Models\Entity::query()->value('id');
         }
@@ -204,6 +235,12 @@ class PembayaranController extends Controller
 
     public function uploadAttachment(Request $request, Pembayaran $pembayaran): JsonResponse
     {
+        // Lampiran mengikuti pemilik barisnya. Tanpa penjagaan ini, izin
+        // *.view berlaku lintas vihara: siapa pun yang boleh melihat
+        // modulnya bisa mengunduh bukti milik vihara lain hanya dengan
+        // menebak id — padahal show() baris yang sama menolak 403.
+        ViharaScopeService::guardRecord($request, $pembayaran->vihara_id);
+
         $request->validate([
             'file' => ['required', 'file', 'max:10240', 'mimes:pdf,jpg,jpeg,png'],
         ]);
@@ -216,8 +253,14 @@ class PembayaranController extends Controller
         return response()->json($pembayaran->fresh(), 201);
     }
 
-    public function downloadAttachment(Pembayaran $pembayaran): StreamedResponse
+    public function downloadAttachment(Request $request, Pembayaran $pembayaran): StreamedResponse
     {
+        // Lampiran mengikuti pemilik barisnya. Tanpa penjagaan ini, izin
+        // *.view berlaku lintas vihara: siapa pun yang boleh melihat
+        // modulnya bisa mengunduh bukti milik vihara lain hanya dengan
+        // menebak id — padahal show() baris yang sama menolak 403.
+        ViharaScopeService::guardRecord($request, $pembayaran->vihara_id);
+
         if (! $pembayaran->attachment_path || ! Storage::disk('local')->exists($pembayaran->attachment_path)) {
             abort(404, 'Tidak ada lampiran untuk pembayaran ini.');
         }

@@ -294,6 +294,13 @@ class AdminController extends Controller
                 'users_count' => (int) ($userCounts[$r->id] ?? 0),
                 'permissions' => $r->permissions->pluck('name')->values(),
                 'is_protected' => in_array($r->name, ['superadmin']),
+                // Role bawaan RbacSeeder dibuat ulang setiap seeding, jadi
+                // menghapusnya hanya menipu: ia kembali pada deploy berikutnya.
+                'is_builtin' => isset(RbacSeeder::ROLES[$r->name]),
+                // Satu-satunya sumber kebenaran untuk tombol hapus di UI;
+                // penegakan sebenarnya tetap di destroyRole().
+                'can_delete' => ! isset(RbacSeeder::ROLES[$r->name])
+                    && (int) ($userCounts[$r->id] ?? 0) === 0,
                 'description' => RbacSeeder::ROLES[$r->name]['description'] ?? null,
                 // Anjuran untuk form tambah pengguna; penegakan tetap di
                 // users.scope_type, bukan di role.
@@ -362,5 +369,38 @@ class AdminController extends Controller
             'name' => $role->name,
             'permissions' => $role->permissions->pluck('name')->values(),
         ], 201);
+    }
+
+    /**
+     * DELETE /api/admin/roles/{role}
+     *
+     * Hanya role buatan sendiri yang boleh dihapus, dan hanya selama tidak
+     * ada pengguna yang memakainya. Menghapus role yang masih dipakai akan
+     * melepas seluruh permission penggunanya tanpa jejak — itu kegagalan
+     * senyap, bukan kemudahan.
+     */
+    public function destroyRole(Request $request, Role $role): JsonResponse
+    {
+        if ($role->name === 'superadmin') {
+            return response()->json(['message' => 'Role superadmin tidak boleh dihapus.'], 422);
+        }
+
+        if (isset(RbacSeeder::ROLES[$role->name])) {
+            return response()->json([
+                'message' => "Role bawaan '{$role->name}' tidak boleh dihapus — ia dibuat ulang setiap seeding. Kosongkan permission-nya bila ingin dinonaktifkan.",
+            ], 422);
+        }
+
+        $dipakai = $role->users()->count();
+        if ($dipakai > 0) {
+            return response()->json([
+                'message' => "Role '{$role->name}' masih dipakai {$dipakai} pengguna. Pindahkan pengguna itu ke role lain dulu.",
+            ], 422);
+        }
+
+        $role->delete();
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        return response()->json(['message' => 'deleted']);
     }
 }

@@ -134,6 +134,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('can:roles.manage')->group(function () {
         Route::post('/admin/roles', [AdminController::class, 'storeRole']);
         Route::patch('/admin/roles/{role}', [AdminController::class, 'updateRole']);
+        Route::delete('/admin/roles/{role}', [AdminController::class, 'destroyRole']);
     });
 
     // --- Pembayaran + Penerimaan + Jurnal Manual ---

@@ -23,24 +23,24 @@ class KasBankController extends Controller
             'bank_account_id' => ['sometimes', 'integer', 'exists:vihara_bank_accounts,id'],
         ]);
 
-        $viharaId = ViharaScopeService::readFilter($request);
+        $viharaIds = ViharaScopeService::readFilterIds($request);
         $bankAccountId = $request->integer('bank_account_id') ?: null;
 
         return response()->json([
-            'bank_accounts' => $this->bankAccounts($viharaId),
-            'kas_kecil' => $this->kasKecil($viharaId),
-            'kas_tunai' => $this->kasTunai($viharaId),
-            'mutasi' => $this->mutasi($viharaId, $bankAccountId),
+            'bank_accounts' => $this->bankAccounts($viharaIds),
+            'kas_kecil' => $this->kasKecil($viharaIds),
+            'kas_tunai' => $this->kasTunai($viharaIds),
+            'mutasi' => $this->mutasi($viharaIds, $bankAccountId),
         ]);
     }
 
     /** Saldo per rekening = penerimaan − pembayaran − topup kas kecil (posted) + net settlement KM. */
-    private function bankAccounts(?int $viharaId): array
+    private function bankAccounts(?array $viharaIds): array
     {
         $accounts = ViharaBankAccount::query()
             ->with('vihara:id,name')
             ->where('active', true)
-            ->when($viharaId, fn ($q) => $q->where('vihara_id', $viharaId))
+            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))
             ->orderBy('bank_name')
             ->orderBy('id')
             ->get();
@@ -77,11 +77,11 @@ class KasBankController extends Controller
     }
 
     /** Saldo kas kecil per PIC (posted topup − posted usage). */
-    private function kasKecil(?int $viharaId): array
+    private function kasKecil(?array $viharaIds): array
     {
         $pics = PettyCashPic::query()
             ->where('active', true)
-            ->when($viharaId, fn ($q) => $q->where('vihara_id', $viharaId))
+            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))
             ->orderBy('name')
             ->get(['id', 'name']);
 
@@ -108,15 +108,15 @@ class KasBankController extends Controller
     }
 
     /** Kas tunai = penerimaan tunai − pembayaran tunai − topup kas kecil dari kas tunai (posted). */
-    private function kasTunai(?int $viharaId): string
+    private function kasTunai(?array $viharaIds): string
     {
         $in = (float) DB::table('penerimaan')->where('status', 'posted')->where('method', 'tunai')
-            ->when($viharaId, fn ($q) => $q->where('vihara_id', $viharaId))->sum('amount');
+            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))->sum('amount');
         $out = (float) DB::table('pembayaran')->where('status', 'posted')->where('method', 'tunai')
-            ->when($viharaId, fn ($q) => $q->where('vihara_id', $viharaId))->sum('amount');
+            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))->sum('amount');
         $topup = (float) DB::table('petty_cash_movements')->where('status', 'posted')
             ->where('subtype', 'topup')->whereNull('source_bank_account_id')
-            ->when($viharaId, fn ($q) => $q->where('vihara_id', $viharaId))->sum('amount');
+            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))->sum('amount');
 
         return number_format($in - $out - $topup, 2, '.', '');
     }
@@ -125,12 +125,12 @@ class KasBankController extends Controller
      * Mutasi bank terakhir (cap 50): penerimaan/pembayaran posted yang lewat
      * rekening + pengisian kas kecil bersumber rekening.
      */
-    private function mutasi(?int $viharaId, ?int $bankAccountId): array
+    private function mutasi(?array $viharaIds, ?int $bankAccountId): array
     {
-        $scope = function ($q, string $bankColumn) use ($viharaId, $bankAccountId) {
+        $scope = function ($q, string $bankColumn) use ($viharaIds, $bankAccountId) {
             $q->where('status', 'posted')->whereNotNull($bankColumn);
-            if ($viharaId) {
-                $q->where('vihara_id', $viharaId);
+            if ($viharaIds !== null) {
+                $q->whereIn('vihara_id', $viharaIds);
             }
             if ($bankAccountId) {
                 $q->where($bankColumn, $bankAccountId);
@@ -157,7 +157,7 @@ class KasBankController extends Controller
         // Payout settlement KM masuk rekening (net) — tidak lewat penerimaan.
         $settlement = DB::table('km_settlements')
             ->whereNotNull('bank_account_id')
-            ->when($viharaId, fn ($q) => $q->where('vihara_id', $viharaId))
+            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))
             ->when($bankAccountId, fn ($q) => $q->where('bank_account_id', $bankAccountId))
             ->selectRaw(
                 "id, settled_at::date AS date, 'Settlement KM ' || ref AS name, "

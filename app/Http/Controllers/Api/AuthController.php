@@ -31,15 +31,7 @@ class AuthController extends Controller
 
         return response()->json([
             'token' => $token,
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'entity_id' => $user->entity_id,
-                'vihara_id' => $user->vihara_id,
-                'roles' => $user->getRoleNames(),
-                'permissions' => $user->getAllPermissions()->pluck('name'),
-            ],
+            'user' => self::profile($user),
         ]);
     }
 
@@ -52,16 +44,40 @@ class AuthController extends Controller
 
     public function me(Request $request): JsonResponse
     {
-        $user = $request->user();
+        return response()->json(self::profile($request->user()));
+    }
 
-        return response()->json([
+    /**
+     * Profil + hirarki akses. Frontend memakai `scope_type` dan `vihara_ids`
+     * untuk menentukan apa yang boleh ditampilkan; `vihara_id` dipertahankan
+     * demi klien lama dan hanya terisi bila user terkunci ke satu vihara.
+     *
+     * @return array<string, mixed>
+     */
+    private static function profile(User $user): array
+    {
+        $viharaIds = $user->allowedViharaIds();
+
+        return [
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
             'entity_id' => $user->entity_id,
-            'vihara_id' => $user->vihara_id,
+            'entity' => $user->entity
+                ? ['id' => $user->entity->id, 'code' => $user->entity->code, 'legal_name' => $user->entity->legal_name]
+                : null,
+            'scope_type' => $user->scope_type,
+            // null = tanpa batas (admin tertinggi).
+            'vihara_ids' => $viharaIds,
+            'vihara_id' => $user->primary_vihara_id,
+            'can_see_yayasan_level' => $user->canSeeYayasanLevel(),
             'roles' => $user->getRoleNames(),
             'permissions' => $user->getAllPermissions()->pluck('name'),
-        ]);
+            'app' => [
+                // Mode yayasan tunggal: UI menyembunyikan pemilih vihara
+                // dan menu konsolidasi.
+                'single_entity_mode' => (bool) config('app.single_entity_mode'),
+            ],
+        ];
     }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\JournalLine;
+use App\Services\ViharaScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -29,6 +30,7 @@ class CashController extends Controller
         $journalQuery = JournalLine::query()
             ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
             ->where('journal_entries.entry_date', '<=', $asOf)
+            ->tap(fn ($q) => ViharaScopeService::applyScope($q, $request, 'journal_entries.vihara_id', true))
             ->groupBy('journal_lines.account_code')
             ->select(
                 'journal_lines.account_code',
@@ -80,6 +82,7 @@ class CashController extends Controller
             ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
             ->where('journal_lines.account_code', $accountCode)
             ->where('journal_entries.entry_date', '<', $start)
+            ->tap(fn ($q) => ViharaScopeService::applyScope($q, $request, 'journal_entries.vihara_id', true))
             ->selectRaw('COALESCE(SUM(debit) - SUM(credit), 0) as balance')
             ->value('balance');
 
@@ -87,6 +90,7 @@ class CashController extends Controller
             ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
             ->where('journal_lines.account_code', $accountCode)
             ->whereBetween('journal_entries.entry_date', [$start, $end])
+            ->tap(fn ($q) => ViharaScopeService::applyScope($q, $request, 'journal_entries.vihara_id', true))
             ->orderBy('journal_entries.entry_date')
             ->orderBy('journal_lines.id')
             ->select(
@@ -164,6 +168,9 @@ class CashController extends Controller
 
     public function reconcile(Request $request, JournalLine $journalLine): JsonResponse
     {
+        // Baris jurnal milik vihara lain tidak boleh direkonsiliasi.
+        ViharaScopeService::guardRecord($request, $journalLine->journalEntry?->vihara_id);
+
         $data = $request->validate([
             'reconciled' => ['required', 'boolean'],
             'bank_statement_date' => ['sometimes', 'nullable', 'date'],

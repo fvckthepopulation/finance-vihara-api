@@ -24,20 +24,50 @@ php artisan migrate --seed
 php artisan serve --port=8400
 ```
 
+## Hirarki akses
+
+Tenant bertingkat: **Yayasan (`entities`) -> Vihara (`viharas`) -> transaksi**.
+Satu database boleh menampung lebih dari satu yayasan.
+
+Akses ditentukan DUA sumbu yang sengaja dipisah:
+
+- **Role** (Spatie) = APA yang boleh dilakukan.
+- **Scope** (`users.scope_type` + pivot `user_vihara`) = DI MANA boleh dilakukan.
+
+| `scope_type` | Jangkauan |
+|---|---|
+| `global` | Semua yayasan, semua vihara. Admin tertinggi. |
+| `entity` | Semua vihara di bawah `users.entity_id`, plus data level yayasan (konsolidasi, jurnal pusat). |
+| `vihara` | HANYA vihara di pivot `user_vihara` — bisa satu, bisa beberapa. Tidak pernah melihat vihara lain maupun data level yayasan. |
+
+Karena scope terpisah dari role, "bendahara 2 vihara" atau "pengawas seluruh
+yayasan" cukup diatur lewat data, tanpa bikin role baru.
+
+Penegakan terpusat di `App\Services\ViharaScopeService` — `applyScope()` untuk
+query read, `creationViharaId()` saat membuat record, `guardRecord()` untuk
+akses satu baris. Isolasi ditegakkan di query (`whereIn`), bukan hanya di UI.
+
+Seeded roles: `superadmin`, `admin_yayasan`, `pengawas_yayasan`, `bendahara`,
+`approver`, `viewer`. Lihat `RbacSeeder` untuk daftar permission kanonik dan
+`default_scope` tiap role.
+
 Seeded demo users (password `password`):
 
-| Email | Role | Vihara scope |
-|---|---|---|
-| admin@vihara.test | superadmin | all viharas |
-| bendahara@vvg.test | bendahara | VVG |
-| approver@vvg.test | approver | VVG |
-| viewer@vvg.test | viewer | VVG |
+| Email | Role | Scope | Jangkauan |
+|---|---|---|---|
+| admin@vihara.test | superadmin | `global` | Semua yayasan |
+| yayasan@ydi.test | admin_yayasan | `entity` | Semua vihara YDI + kelola pengguna |
+| pengawas@ydi.test | pengawas_yayasan | `entity` | Semua vihara YDI, read-only |
+| bendahara@vvg.test | bendahara | `vihara` | VVG |
+| bendahara@vbm.test | bendahara | `vihara` | VBM |
+| bendahara.multi@ydi.test | bendahara | `vihara` | VVG + VAD |
+| approver@vvg.test | approver | `vihara` | VVG |
+| viewer@vvg.test | viewer | `vihara` | VVG |
 
-Seeded roles: `superadmin`, `bendahara`, `approver`, `viewer`. See
-`RbacSeeder` for canonical permission keys.
-
-Seeded viharas: `VVG` (Vihāra Vipassanā Giriratana, Bogor), `VBM`
-(Vihāra Buddhametta, Bandung), `VAD` (Vihāra Ananda Dharma, Jakarta).
+Seeded yayasan: `YDI` (Yayasan Dhammavihara Indonesia).
+Seeded viharas (semua di bawah YDI): `VVG` (Vihāra Vipassanā Giriratana,
+Bogor), `VBM` (Vihāra Buddhametta, Bandung), `VAD` (Vihāra Ananda Dharma,
+Jakarta).
 
 ## Configuration
 
@@ -53,6 +83,7 @@ Required env vars:
 | `DB_PASSWORD` | `<strong>` | |
 | `FRONTEND_URL` | `https://app.your-domain.com` | For CORS allow-origin |
 | `SANCTUM_STATEFUL_DOMAINS` | `app.your-domain.com` | Comma-separated |
+| `SINGLE_ENTITY_MODE` | `false` | `true` = instance yayasan tunggal: UI menyembunyikan pemilih vihara & menu Konsolidasi. Penegakan API TIDAK berubah. |
 
 ## Branches
 

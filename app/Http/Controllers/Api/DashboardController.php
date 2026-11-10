@@ -52,7 +52,6 @@ class DashboardController extends Controller
             'vihara_id' => ['sometimes', 'integer', 'exists:viharas,id'],
         ]);
 
-        $viharaId = ViharaScopeService::readFilter($request);
 
         $mode = $data['mode'] ?? 'ytd';
         $year = (int) ($data['year'] ?? now()->year);
@@ -66,7 +65,7 @@ class DashboardController extends Controller
         $masukRows = Penerimaan::query()
             ->where('status', 'posted')
             ->whereBetween('date', $range)
-            ->when($viharaId, fn ($q) => $q->where('vihara_id', $viharaId))
+            ->tap(fn ($q) => ViharaScopeService::applyScope($q, $request))
             ->groupBy('category', 'method')
             ->select('category', 'method', DB::raw('COUNT(*) as tx_count'), DB::raw('SUM(amount) as tx_total'))
             ->get();
@@ -119,7 +118,7 @@ class DashboardController extends Controller
         $keluarRows = Pembayaran::query()
             ->where('status', 'posted')
             ->whereBetween('date', $range)
-            ->when($viharaId, fn ($q) => $q->where('vihara_id', $viharaId))
+            ->tap(fn ($q) => ViharaScopeService::applyScope($q, $request))
             ->groupBy('category')
             ->select('category', DB::raw('COUNT(*) as tx_count'), DB::raw('SUM(amount) as tx_total'))
             ->get();

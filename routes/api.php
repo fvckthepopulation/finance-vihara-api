@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\LaporanController;
 use App\Http\Controllers\Api\CashController;
 use App\Http\Controllers\Api\DanaUmatController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\EntityController;
 use App\Http\Controllers\Api\KmReportController;
 use App\Http\Controllers\Api\KasBankController;
 use App\Http\Controllers\Api\ManualJournalController;
@@ -125,11 +126,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/admin/users/{user}', [AdminController::class, 'updateUser']);
         Route::delete('/admin/users/{user}', [AdminController::class, 'destroyUser']);
     });
+    // Membaca katalog role/permission dibutuhkan siapa pun yang boleh
+    // mengelola pengguna (form "User baru" butuh daftar role). Yang
+    // benar-benar mengubah DEFINISI role tetap butuh roles.manage.
+    Route::get('/admin/roles', [AdminController::class, 'roles']);
+    Route::get('/admin/permissions', [AdminController::class, 'permissions']);
     Route::middleware('can:roles.manage')->group(function () {
-        Route::get('/admin/roles', [AdminController::class, 'roles']);
         Route::post('/admin/roles', [AdminController::class, 'storeRole']);
         Route::patch('/admin/roles/{role}', [AdminController::class, 'updateRole']);
-        Route::get('/admin/permissions', [AdminController::class, 'permissions']);
     });
 
     // --- Pembayaran + Penerimaan + Jurnal Manual ---
@@ -161,6 +165,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/journal-entries', [ManualJournalController::class, 'store'])->middleware('can:journal.create');
     Route::get('/journal-entries/{journalEntry}', [ManualJournalController::class, 'show'])->middleware('can:journal.view');
     Route::delete('/journal-entries/{journalEntry}', [ManualJournalController::class, 'destroy'])->middleware('can:journal.create');
+
+    // --- Yayasan (entity) CRUD — puncak hirarki tenant ---
+    Route::get('/entities', [EntityController::class, 'index'])->middleware('can:entities.view');
+    Route::get('/entities/{entity}', [EntityController::class, 'show'])->middleware('can:entities.view');
+    Route::post('/entities', [EntityController::class, 'store'])->middleware('can:entities.manage');
+    Route::patch('/entities/{entity}', [EntityController::class, 'update'])->middleware('can:entities.manage');
+    Route::delete('/entities/{entity}', [EntityController::class, 'destroy'])->middleware('can:entities.manage');
 
     // --- Vihara master CRUD (uses masters.* permission) ---
     Route::get('/viharas', [ViharaController::class, 'index'])->middleware('can:masters.view');

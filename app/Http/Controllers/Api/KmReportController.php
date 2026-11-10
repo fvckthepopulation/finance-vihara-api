@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\JournalLine;
+use App\Services\ViharaScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -27,6 +28,8 @@ class KmReportController extends Controller
      */
     public function profitLoss(Request $request): JsonResponse
     {
+        $this->resolveScope($request);
+
         [$from, $to, $status] = $this->parsePeriod($request);
 
         $revenue = $this->aggregate('4', $from, $to, $status, credit: true);
@@ -61,6 +64,8 @@ class KmReportController extends Controller
      */
     public function balanceSheet(Request $request): JsonResponse
     {
+        $this->resolveScope($request);
+
         $asOf = $request->string('as_of')->toString() ?: now()->toDateString();
         $status = $request->string('status')->toString() ?: 'posted';
 
@@ -103,11 +108,14 @@ class KmReportController extends Controller
      */
     public function trialBalance(Request $request): JsonResponse
     {
+        $this->resolveScope($request);
+
         $asOf = $request->string('as_of')->toString() ?: now()->toDateString();
         $status = $request->string('status')->toString() ?: 'posted';
 
         $q = JournalLine::query()
             ->join('journal_entries', 'journal_lines.journal_entry_id', '=', 'journal_entries.id')
+            ->tap(fn ($qq) => $this->scopeJournal($qq))
             ->whereDate('journal_entries.entry_date', '<=', $asOf);
         if ($status === 'posted') {
             $q->where('journal_entries.status', 'posted');
@@ -160,6 +168,8 @@ class KmReportController extends Controller
      */
     public function pajakRekap(Request $request): JsonResponse
     {
+        $this->resolveScope($request);
+
         [$from, $to, $status] = $this->parsePeriod($request);
 
         $pajak = $this->aggregate('7', $from, $to, $status, credit: false);
@@ -180,6 +190,41 @@ class KmReportController extends Controller
     // ────────────────────────── helpers ──────────────────────────
 
     /** @return array{0:string,1:string,2:string} [from, to, status] */
+    /**
+     * Batas vihara untuk seluruh query laporan pada request ini.
+     * null = tanpa batas (scope global).
+     *
+     * @var array<int, int>|null
+     */
+    private ?array $viharaIds = null;
+
+    /** Ikutkan jurnal level yayasan (vihara_id NULL). */
+    private bool $includeYayasanLevel = true;
+
+    private function resolveScope(Request $request): void
+    {
+        $this->viharaIds = ViharaScopeService::readFilterIds($request);
+        $this->includeYayasanLevel = ! $request->filled('vihara_id')
+            && $request->user()->canSeeYayasanLevel();
+    }
+
+    /** Terapkan batas vihara ke query jurnal apa pun di controller ini. */
+    private function scopeJournal($q): void
+    {
+        if ($this->viharaIds === null) {
+            return;
+        }
+
+        $ids = $this->viharaIds;
+        $yys = $this->includeYayasanLevel;
+
+        $q->where(function ($w) use ($ids, $yys) {
+            $w->whereIn('journal_entries.vihara_id', $ids);
+            if ($yys) {
+                $w->orWhereNull('journal_entries.vihara_id');
+            }
+        });
+    }
     private function parsePeriod(Request $request): array
     {
         $from = $request->string('from')->toString() ?: now()->startOfMonth()->toDateString();
@@ -196,6 +241,7 @@ class KmReportController extends Controller
     {
         $q = JournalLine::query()
             ->join('journal_entries', 'journal_lines.journal_entry_id', '=', 'journal_entries.id')
+            ->tap(fn ($qq) => $this->scopeJournal($qq))
             ->where('journal_lines.account_code', 'like', "{$prefix}%")
             ->whereBetween('journal_entries.entry_date', [$from, $to]);
         if ($status === 'posted') {
@@ -227,6 +273,7 @@ class KmReportController extends Controller
     {
         $q = JournalLine::query()
             ->join('journal_entries', 'journal_lines.journal_entry_id', '=', 'journal_entries.id')
+            ->tap(fn ($qq) => $this->scopeJournal($qq))
             ->whereIn('journal_lines.account_code', $codes)
             ->whereBetween('journal_entries.entry_date', [$from, $to]);
         if ($status === 'posted') {
@@ -257,6 +304,7 @@ class KmReportController extends Controller
     {
         $q = JournalLine::query()
             ->join('journal_entries', 'journal_lines.journal_entry_id', '=', 'journal_entries.id')
+            ->tap(fn ($qq) => $this->scopeJournal($qq))
             ->where('journal_lines.account_code', 'like', "{$prefix}%")
             ->whereDate('journal_entries.entry_date', '<=', $asOf);
         if ($status === 'posted') {
@@ -300,6 +348,7 @@ class KmReportController extends Controller
     {
         $q = JournalLine::query()
             ->join('journal_entries', 'journal_lines.journal_entry_id', '=', 'journal_entries.id')
+            ->tap(fn ($qq) => $this->scopeJournal($qq))
             ->where('journal_lines.account_code', 'like', '7%')
             ->whereBetween('journal_entries.entry_date', [$from, $to]);
         if ($status === 'posted') {

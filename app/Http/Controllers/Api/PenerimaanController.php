@@ -31,9 +31,7 @@ class PenerimaanController extends Controller
             ->orderByDesc('date')
             ->orderByDesc('id');
 
-        if ($viharaId = ViharaScopeService::readFilter($request)) {
-            $q->where('vihara_id', $viharaId);
-        }
+        ViharaScopeService::applyScope($q, $request);
         if ($status = $request->string('status')->toString()) {
             $q->where('status', $status);
         }

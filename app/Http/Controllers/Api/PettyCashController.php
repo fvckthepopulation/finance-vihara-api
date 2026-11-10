@@ -32,9 +32,7 @@ class PettyCashController extends Controller
             ->orderByDesc('movement_date')
             ->orderByDesc('id');
 
-        if ($viharaId = ViharaScopeService::readFilter($request)) {
-            $query->where('vihara_id', $viharaId);
-        }
+        ViharaScopeService::applyScope($query, $request);
         if ($picId = $request->integer('pic_id')) {
             $query->where('pic_id', $picId);
         }
@@ -71,11 +69,11 @@ class PettyCashController extends Controller
      */
     public function summary(Request $request): JsonResponse
     {
-        $viharaId = ViharaScopeService::readFilter($request);
+        $viharaIds = ViharaScopeService::readFilterIds($request);
 
         $pics = PettyCashPic::query()
             ->where('active', true)
-            ->when($viharaId, fn ($q) => $q->where('vihara_id', $viharaId))
+            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))
             ->orderBy('name')
             ->get(['id', 'vihara_id', 'name']);
 

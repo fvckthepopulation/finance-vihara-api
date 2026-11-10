@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Vihara;
+use App\Services\ViharaScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -11,7 +12,15 @@ class ViharaController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $q = Vihara::query()->orderBy('code');
+        // Daftar vihara ikut hirarki: user vihara hanya melihat viharanya,
+        // user yayasan melihat vihara di yayasannya, global melihat semua.
+        $q = ViharaScopeService::visibleViharasQuery($request->user())
+            ->with('entity:id,code,legal_name')
+            ->orderBy('code');
+
+        if ($entityId = $request->integer('entity_id')) {
+            $q->where('entity_id', $entityId);
+        }
 
         if ($request->boolean('active_only')) {
             $q->where('active', true);
@@ -26,14 +35,17 @@ class ViharaController extends Controller
         return response()->json($q->paginate(50));
     }
 
-    public function show(Vihara $vihara): JsonResponse
+    public function show(Request $request, Vihara $vihara): JsonResponse
     {
-        return response()->json($vihara->load('verifiedBy:id,name,email'));
+        ViharaScopeService::guardRecord($request, (int) $vihara->id);
+
+        return response()->json($vihara->load('verifiedBy:id,name,email', 'entity:id,code,legal_name'));
     }
 
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
+            'entity_id' => ['sometimes', 'integer', 'exists:entities,id'],
             'name' => ['required', 'string', 'max:255'],
             'address' => ['sometimes', 'nullable', 'string'],
             'contact_pic' => ['sometimes', 'nullable', 'string', 'max:255'],
@@ -46,15 +58,33 @@ class ViharaController extends Controller
             'active' => ['sometimes', 'boolean'],
         ]);
 
+        // Vihara selalu lahir di bawah satu yayasan. User non-global hanya
+        // boleh menambah vihara di yayasannya sendiri.
+        $user = $request->user();
+        if (! $user->isGlobalScope()) {
+            if ($user->entity_id === null) {
+                abort(403, 'Akun Anda tidak terikat ke yayasan mana pun.');
+            }
+            if (isset($data['entity_id']) && (int) $data['entity_id'] !== (int) $user->entity_id) {
+                abort(403, 'Anda hanya boleh menambah vihara di yayasan Anda sendiri.');
+            }
+            $data['entity_id'] = (int) $user->entity_id;
+        } elseif (! isset($data['entity_id'])) {
+            abort(422, 'entity_id wajib diisi — pilih yayasan penaung vihara ini.');
+        }
+
         $data['code'] = $this->nextCode();
         $vihara = Vihara::create($data);
 
-        return response()->json($vihara, 201);
+        return response()->json($vihara->load('entity:id,code,legal_name'), 201);
     }
 
     public function update(Request $request, Vihara $vihara): JsonResponse
     {
+        ViharaScopeService::guardRecord($request, (int) $vihara->id);
+
         $data = $request->validate([
+            'entity_id' => ['sometimes', 'integer', 'exists:entities,id'],
             'name' => ['sometimes', 'string', 'max:255'],
             'address' => ['sometimes', 'nullable', 'string'],
             'contact_pic' => ['sometimes', 'nullable', 'string', 'max:255'],
@@ -67,13 +97,21 @@ class ViharaController extends Controller
             'active' => ['sometimes', 'boolean'],
         ]);
 
+        // Memindahkan vihara antar yayasan hanya hak admin tertinggi.
+        if (isset($data['entity_id']) && ! $request->user()->isGlobalScope()
+            && (int) $data['entity_id'] !== (int) $vihara->entity_id) {
+            abort(403, 'Hanya admin tingkat global yang boleh memindahkan vihara antar yayasan.');
+        }
+
         $vihara->update($data);
 
-        return response()->json($vihara);
+        return response()->json($vihara->fresh()->load('entity:id,code,legal_name'));
     }
 
     public function verify(Request $request, Vihara $vihara): JsonResponse
     {
+        ViharaScopeService::guardRecord($request, (int) $vihara->id);
+
         if ($vihara->verified_at) {
             return response()->json(['message' => 'Vihara sudah diverifikasi.'], 422);
         }
@@ -84,8 +122,10 @@ class ViharaController extends Controller
         return response()->json($vihara->fresh());
     }
 
-    public function destroy(Vihara $vihara): JsonResponse
+    public function destroy(Request $request, Vihara $vihara): JsonResponse
     {
+        ViharaScopeService::guardRecord($request, (int) $vihara->id);
+
         if ($vihara->users()->exists()) {
             return response()->json(['message' => 'Tidak bisa hapus — masih ada user terhubung. Nonaktifkan saja.'], 422);
         }

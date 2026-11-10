@@ -65,6 +65,19 @@ return [
     |
     */
 
+    /*
+    |----------------------------------------------------------------------
+    | Mode Yayasan Tunggal
+    |----------------------------------------------------------------------
+    |
+    | true = instance ini hanya melayani satu yayasan tanpa cabang vihara.
+    | Frontend menyembunyikan pemilih vihara dan menu Konsolidasi Yayasan.
+    | API tetap menegakkan hirarki yang sama — ini murni penyesuaian UI.
+    |
+    */
+
+    'single_entity_mode' => env('SINGLE_ENTITY_MODE', false),
+
     'timezone' => env('APP_TIMEZONE', 'Asia/Jakarta'),
 
     /*

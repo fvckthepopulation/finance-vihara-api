@@ -12,11 +12,21 @@ use Illuminate\Http\Request;
 
 class MasterController extends Controller
 {
-    public function entities(): JsonResponse
+    /**
+     * Dropdown yayasan. Hanya admin tingkat global yang melihat semua
+     * yayasan; sisanya terbatas pada yayasannya sendiri.
+     */
+    public function entities(Request $request): JsonResponse
     {
-        return response()->json(
-            Entity::query()->where('active', true)->orderBy('code')->get(['id', 'code', 'legal_name']),
-        );
+        $user = $request->user();
+
+        $q = Entity::query()->where('active', true)->orderBy('code');
+
+        if (! $user->isGlobalScope()) {
+            $q->where('id', $user->entity_id);
+        }
+
+        return response()->json($q->get(['id', 'code', 'legal_name']));
     }
 
     /**

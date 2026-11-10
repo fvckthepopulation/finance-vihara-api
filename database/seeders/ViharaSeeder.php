@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Entity;
 use App\Models\Vihara;
 use Illuminate\Database\Seeder;
 
@@ -14,6 +15,9 @@ class ViharaSeeder extends Seeder
 {
     public function run(): void
     {
+        // Semua vihara di seeder ini bernaung di bawah YDI.
+        $entityId = Entity::where('code', 'YDI')->value('id');
+
         $viharas = [
             [
                 'code' => 'VVG',
@@ -47,6 +51,7 @@ class ViharaSeeder extends Seeder
             Vihara::updateOrCreate(
                 ['code' => $v['code']],
                 $v + [
+                    'entity_id' => $entityId,
                     'active' => true,
                     'verified_at' => now(),
                 ],

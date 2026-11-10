@@ -23,9 +23,7 @@ class ViharaBankAccountController extends Controller
             ->orderBy('bank_name')
             ->orderBy('id');
 
-        if ($viharaId = ViharaScopeService::readFilter($request)) {
-            $q->where('vihara_id', $viharaId);
-        }
+        ViharaScopeService::applyScope($q, $request);
 
         return response()->json([
             'data' => $q->get([

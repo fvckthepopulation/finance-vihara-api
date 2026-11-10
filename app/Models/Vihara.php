@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
+    'entity_id',
     'code', 'name', 'address',
     'contact_pic', 'contact_phone', 'contact_email',
     'bank_name', 'bank_account_number', 'bank_account_holder',
@@ -31,10 +32,20 @@ class Vihara extends Model
         return $this->belongsTo(User::class, 'verified_by_user_id');
     }
 
-    /** Users scoped to this vihara (multi-tenant; null vihara_id = all viharas). */
-    public function users(): \Illuminate\Database\Eloquent\Relations\HasMany
+    /** Yayasan yang menaungi vihara ini. */
+    public function entity(): BelongsTo
     {
-        return $this->hasMany(User::class);
+        return $this->belongsTo(Entity::class);
+    }
+
+    /**
+     * User yang di-assign eksplisit ke vihara ini (scope_type = vihara).
+     * User scope `entity`/`global` tidak muncul di sini — aksesnya diturunkan
+     * dari yayasan, bukan dari pivot.
+     */
+    public function users(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'user_vihara')->withTimestamps();
     }
 
     /** Rekening bank milik vihara (master, dipakai transaksi & kas-bank). */

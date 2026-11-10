@@ -39,7 +39,7 @@ class DanaUmatController extends Controller
             'vihara_id' => ['sometimes', 'integer', 'exists:viharas,id'],
         ]);
 
-        $viharaId = ViharaScopeService::readFilter($request);
+        $viharaIds = ViharaScopeService::readFilterIds($request);
 
         $mode = $data['mode'] ?? 'ytd';
         $year = (int) ($data['year'] ?? now()->year);
@@ -52,7 +52,7 @@ class DanaUmatController extends Controller
         $base = fn () => Penerimaan::query()
             ->where('status', 'posted')
             ->whereBetween('date', $range)
-            ->when($viharaId, fn ($q) => $q->where('vihara_id', $viharaId));
+            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds));
 
         // Count + total dihitung atas seluruh set (bukan hanya baris yang di-cap).
         $agg = $base()

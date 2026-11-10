@@ -33,7 +33,7 @@ class ReconciliationController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $viharaId = ViharaScopeService::readFilter($request);
+        $viharaIds = ViharaScopeService::readFilterIds($request);
 
         $runs = ReconciliationRun::query()
             ->with('bankAccount:id,bank_name,account_number')
@@ -41,7 +41,7 @@ class ReconciliationController extends Controller
                 'bankLines as statement_count',
                 'bankLines as matched_count' => fn ($q) => $q->whereNotNull('matched_type'),
             ])
-            ->when($viharaId, fn ($q) => $q->where('vihara_id', $viharaId))
+            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))
             ->orderByDesc('period_month')
             ->orderByDesc('id')
             ->get()
@@ -62,16 +62,16 @@ class ReconciliationController extends Controller
 
         return response()->json([
             'runs' => $runs,
-            'banks' => $this->bankSummaries($viharaId),
+            'banks' => $this->bankSummaries($viharaIds),
         ]);
     }
 
     /** Saldo buku per rekening (rumus sama dengan /api/kas-bank) + run terakhir. */
-    private function bankSummaries(?int $viharaId): array
+    private function bankSummaries(?array $viharaIds): array
     {
         $accounts = ViharaBankAccount::query()
             ->where('active', true)
-            ->when($viharaId, fn ($q) => $q->where('vihara_id', $viharaId))
+            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))
             ->orderBy('bank_name')
             ->orderBy('id')
             ->get();
@@ -455,7 +455,7 @@ class ReconciliationController extends Controller
             'vihara_id' => ['sometimes', 'integer', 'exists:viharas,id'],
         ]);
 
-        $viharaId = ViharaScopeService::readFilter($request);
+        $viharaIds = ViharaScopeService::readFilterIds($request);
         $mode = $request->string('mode')->toString() ?: 'ytd';
         $year = $request->integer('year') ?: now()->year;
         $month = $request->integer('month') ?: now()->month;
@@ -469,7 +469,7 @@ class ReconciliationController extends Controller
         }
         [$startD, $endD] = [$start->toDateString(), $end->toDateString()];
 
-        $scope = fn ($q) => $q->when($viharaId, fn ($qq) => $qq->where('vihara_id', $viharaId));
+        $scope = fn ($q) => $q->when($viharaIds !== null, fn ($qq) => $qq->whereIn('vihara_id', $viharaIds));
 
         $grossQ = $scope(DB::table('penerimaan'))
             ->where('status', 'posted')->where('method', 'auto_credit')
@@ -493,7 +493,7 @@ class ReconciliationController extends Controller
         // masih paid. Yang settled hilang dari daftar.
         $pending = Penerimaan::query()
             ->with('kmDonation:id,penerimaan_id,ref,status')
-            ->when($viharaId, fn ($q) => $q->where('vihara_id', $viharaId))
+            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))
             ->where('status', 'posted')->where('method', 'auto_credit')
             ->whereBetween('date', [$startD, $endD])
             ->whereDoesntHave('kmDonation', fn ($q) => $q->where('status', 'settled'))
@@ -520,7 +520,7 @@ class ReconciliationController extends Controller
             ->where('journal_lines.account_code', '1160')
             ->where('journal_entries.status', 'posted')
             ->where('journal_entries.entry_date', '<=', $endD)
-            ->when($viharaId, fn ($q) => $q->where('journal_entries.vihara_id', $viharaId))
+            ->when($viharaIds !== null, fn ($q) => $q->whereIn('journal_entries.vihara_id', $viharaIds))
             ->selectRaw('COALESCE(SUM(journal_lines.debit - journal_lines.credit),0) AS saldo')
             ->value('saldo');
 
@@ -528,7 +528,7 @@ class ReconciliationController extends Controller
         $settlements = KmSettlement::query()
             ->with('bankAccount:id,bank_name,account_number')
             ->withCount('donations')
-            ->when($viharaId, fn ($q) => $q->where('vihara_id', $viharaId))
+            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))
             ->whereBetween('settled_at', ["{$startD} 00:00:00", "{$endD} 23:59:59"])
             ->orderByDesc('settled_at')->orderByDesc('id')
             ->limit(20)
@@ -574,11 +574,11 @@ class ReconciliationController extends Controller
         $request->validate([
             'vihara_id' => ['sometimes', 'integer', 'exists:viharas,id'],
         ]);
-        $viharaId = ViharaScopeService::readFilter($request);
+        $viharaIds = ViharaScopeService::readFilterIds($request);
 
         $items = Penerimaan::query()
             ->with('bankAccount:id,bank_name,account_number')
-            ->when($viharaId, fn ($q) => $q->where('vihara_id', $viharaId))
+            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))
             ->where('status', 'posted')
             ->where('category', 'donasi_belum_teridentifikasi')
             ->orderByDesc('date')->orderByDesc('id')

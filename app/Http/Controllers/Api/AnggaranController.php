@@ -41,9 +41,10 @@ class AnggaranController extends Controller
             'vihara_id' => ['sometimes', 'integer', 'exists:viharas,id'],
         ]);
 
-        $viharaId = ViharaScopeService::readFilter($request);
+        // Anggaran selalu per vihara. focusedViharaId sudah memvalidasi hak
+        // akses; null berarti user punya akses >1 vihara tanpa memilih.
+        $viharaId = ViharaScopeService::focusedViharaId($request);
         if ($viharaId === null) {
-            // Anggaran selalu per vihara — admin yayasan wajib memilih.
             throw ValidationException::withMessages([
                 'vihara_id' => ['vihara_id wajib diisi (anggaran per vihara).'],
             ]);

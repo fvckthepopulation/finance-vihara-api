@@ -141,7 +141,7 @@ class TransactionController extends Controller
      */
     private function filteredQuery(Request $request): Builder
     {
-        $viharaId = ViharaScopeService::readFilter($request);
+        $viharaIds = ViharaScopeService::readFilterIds($request);
         $tipe = $request->string('tipe')->toString();
         $sumber = $request->string('sumber')->toString();
 
@@ -158,7 +158,7 @@ class TransactionController extends Controller
             } elseif ($sumber === 'manual') {
                 $p->where('method', '!=', 'auto_credit');
             }
-            $branches[] = $this->applyCommonFilters($p, $request, $viharaId, 'source_name');
+            $branches[] = $this->applyCommonFilters($p, $request, $viharaIds, 'source_name');
         }
 
         if ($tipe !== 'Penerimaan') {
@@ -170,7 +170,7 @@ class TransactionController extends Controller
                 // Semua pengeluaran adalah manual — filter km mengosongkan branch ini.
                 $b->whereRaw('1 = 0');
             }
-            $branches[] = $this->applyCommonFilters($b, $request, $viharaId, 'payee_name');
+            $branches[] = $this->applyCommonFilters($b, $request, $viharaIds, 'payee_name');
         }
 
         $union = array_shift($branches);
@@ -181,7 +181,7 @@ class TransactionController extends Controller
         return DB::query()->fromSub($union, 't');
     }
 
-    private function applyCommonFilters(Builder $q, Request $request, ?int $viharaId, string $counterpartyColumn): Builder
+    private function applyCommonFilters(Builder $q, Request $request, ?array $viharaIds, string $counterpartyColumn): Builder
     {
         // Cancelled tidak pernah tampil di riwayat.
         if ($status = $request->string('status')->toString()) {
@@ -190,8 +190,8 @@ class TransactionController extends Controller
             $q->whereIn('status', ['draft', 'posted']);
         }
 
-        if ($viharaId) {
-            $q->where('vihara_id', $viharaId);
+        if ($viharaIds !== null) {
+            $q->whereIn('vihara_id', $viharaIds);
         }
         if ($category = $request->string('category')->toString()) {
             $q->where('category', $category);

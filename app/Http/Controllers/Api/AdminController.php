@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Vihara;
 use Database\Seeders\RbacSeeder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,18 +16,34 @@ use Spatie\Permission\PermissionRegistrar;
 class AdminController extends Controller
 {
     /**
-     * GET /api/admin/users — list with roles.
+     * GET /api/admin/users — list with roles + scope.
+     *
+     * Admin yayasan hanya melihat user di yayasannya; admin global melihat
+     * semua.
      */
     public function users(Request $request): JsonResponse
     {
-        $q = User::query()->with('roles:id,name', 'vihara:id,code,name')->orderBy('name');
+        $actor = $request->user();
+
+        $q = User::query()
+            ->with('roles:id,name', 'viharas:id,code,name', 'entity:id,code,legal_name')
+            ->orderBy('name');
+
+        if (! $actor->isGlobalScope()) {
+            $q->where('entity_id', $actor->entity_id);
+        }
+
         if ($search = $request->string('q')->toString()) {
             $q->where(function ($w) use ($search) {
                 $w->where('name', 'like', "%{$search}%")
                   ->orWhere('email', 'like', "%{$search}%");
             });
         }
-        return response()->json($q->get(['id', 'name', 'email', 'entity_id', 'vihara_id', 'created_at']));
+
+        return response()->json(
+            $q->get(['id', 'name', 'email', 'entity_id', 'scope_type', 'created_at'])
+                ->map(fn (User $u) => $this->userPayload($u)),
+        );
     }
 
     /**
@@ -40,20 +57,27 @@ class AdminController extends Controller
             'password' => ['required', 'string', 'min:8'],
             'role' => ['required', 'string', 'exists:roles,name'],
             'entity_id' => ['nullable', 'integer', 'exists:entities,id'],
-            'vihara_id' => ['nullable', 'integer', 'exists:viharas,id'],
+            'scope_type' => ['required', 'string', 'in:' . implode(',', User::SCOPE_TYPES)],
+            'vihara_ids' => ['sometimes', 'array'],
+            'vihara_ids.*' => ['integer', 'exists:viharas,id'],
+            // Kompat klien lama: satu vihara.
+            'vihara_id' => ['sometimes', 'nullable', 'integer', 'exists:viharas,id'],
         ]);
+
+        $scope = $this->resolveScopeInput($request, $data);
 
         $user = User::create([
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
-            'entity_id' => $data['entity_id'] ?? null,
-            'vihara_id' => $data['vihara_id'] ?? null,
+            'entity_id' => $scope['entity_id'],
+            'scope_type' => $scope['scope_type'],
             'email_verified_at' => now(),
         ]);
         $user->syncRoles([$data['role']]);
+        $user->viharas()->sync($scope['vihara_ids']);
 
-        return response()->json($user->fresh()->load('roles:id,name', 'vihara:id,code,name'), 201);
+        return response()->json($this->userPayload($user->fresh()), 201);
     }
 
     /**
@@ -61,29 +85,55 @@ class AdminController extends Controller
      */
     public function updateUser(Request $request, User $user): JsonResponse
     {
+        $this->assertManageable($request, $user);
+
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:120'],
             'email' => ['sometimes', 'email', 'unique:users,email,' . $user->id],
             'password' => ['sometimes', 'nullable', 'string', 'min:8'],
             'role' => ['sometimes', 'string', 'exists:roles,name'],
             'entity_id' => ['sometimes', 'nullable', 'integer', 'exists:entities,id'],
+            'scope_type' => ['sometimes', 'string', 'in:' . implode(',', User::SCOPE_TYPES)],
+            'vihara_ids' => ['sometimes', 'array'],
+            'vihara_ids.*' => ['integer', 'exists:viharas,id'],
             'vihara_id' => ['sometimes', 'nullable', 'integer', 'exists:viharas,id'],
         ]);
 
         if (isset($data['password']) && $data['password']) {
             $user->password = Hash::make($data['password']);
         }
-        if (isset($data['name'])) $user->name = $data['name'];
-        if (isset($data['email'])) $user->email = $data['email'];
-        if (array_key_exists('entity_id', $data)) $user->entity_id = $data['entity_id'];
-        if (array_key_exists('vihara_id', $data)) $user->vihara_id = $data['vihara_id'];
+        if (isset($data['name'])) {
+            $user->name = $data['name'];
+        }
+        if (isset($data['email'])) {
+            $user->email = $data['email'];
+        }
+
+        $touchesScope = array_key_exists('scope_type', $data)
+            || array_key_exists('entity_id', $data)
+            || array_key_exists('vihara_ids', $data)
+            || array_key_exists('vihara_id', $data);
+
+        if ($touchesScope) {
+            $scope = $this->resolveScopeInput($request, $data + [
+                'scope_type' => $data['scope_type'] ?? $user->scope_type,
+                'entity_id' => array_key_exists('entity_id', $data) ? $data['entity_id'] : $user->entity_id,
+            ]);
+            $user->entity_id = $scope['entity_id'];
+            $user->scope_type = $scope['scope_type'];
+        }
+
         $user->save();
+
+        if ($touchesScope) {
+            $user->viharas()->sync($scope['vihara_ids']);
+        }
 
         if (isset($data['role'])) {
             $user->syncRoles([$data['role']]);
         }
 
-        return response()->json($user->fresh()->load('roles:id,name', 'vihara:id,code,name'));
+        return response()->json($this->userPayload($user->fresh()));
     }
 
     /**
@@ -94,6 +144,7 @@ class AdminController extends Controller
         if ($user->id === $request->user()->id) {
             return response()->json(['message' => 'Tidak bisa menghapus akun sendiri.'], 422);
         }
+        $this->assertManageable($request, $user);
         if ($user->hasRole('superadmin') && User::role('superadmin')->count() <= 1) {
             return response()->json(['message' => 'Tidak bisa menghapus superadmin terakhir.'], 422);
         }
@@ -102,10 +153,130 @@ class AdminController extends Controller
     }
 
     /**
+     * Katalog role/permission boleh dibaca oleh pengelola pengguna (butuh
+     * daftar role untuk form) maupun pengelola role. Selain itu ditolak.
+     */
+    private function assertCanReadRoleCatalog(Request $request): void
+    {
+        $user = $request->user();
+        if (! $user->can('users.manage') && ! $user->can('roles.manage')) {
+            abort(403, 'Anda tidak berhak membaca katalog role.');
+        }
+    }
+
+    /** @return array<string, mixed> */
+    private function userPayload(User $user): array
+    {
+        $user->loadMissing('roles:id,name', 'viharas:id,code,name', 'entity:id,code,legal_name');
+
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'entity_id' => $user->entity_id,
+            'entity' => $user->entity,
+            'scope_type' => $user->scope_type,
+            'viharas' => $user->viharas->map(fn ($v) => [
+                'id' => $v->id, 'code' => $v->code, 'name' => $v->name,
+            ])->values(),
+            'vihara_ids' => $user->viharas->pluck('id')->values(),
+            'vihara_id' => $user->primary_vihara_id,
+            'roles' => $user->roles->pluck('name')->values(),
+            'created_at' => $user->created_at,
+        ];
+    }
+
+    /**
+     * Admin yayasan tidak boleh menyentuh user di luar yayasannya.
+     */
+    private function assertManageable(Request $request, User $target): void
+    {
+        $actor = $request->user();
+
+        if ($actor->isGlobalScope()) {
+            return;
+        }
+
+        if ($target->isGlobalScope() || (int) $target->entity_id !== (int) $actor->entity_id) {
+            abort(403, 'Anda hanya boleh mengelola pengguna di yayasan Anda sendiri.');
+        }
+    }
+
+    /**
+     * Normalisasi + validasi hak atas input scope.
+     *
+     * Admin non-global tidak boleh membuat user `global`, tidak boleh keluar
+     * dari yayasannya, dan hanya boleh memberi vihara yang ia sendiri punya
+     * aksesnya.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{scope_type: string, entity_id: ?int, vihara_ids: array<int, int>}
+     */
+    private function resolveScopeInput(Request $request, array $data): array
+    {
+        $actor = $request->user();
+        $scopeType = $data['scope_type'] ?? User::SCOPE_VIHARA;
+        $entityId = $data['entity_id'] ?? null;
+
+        // vihara_ids, dengan fallback ke vihara_id tunggal (klien lama).
+        $viharaIds = array_values(array_unique(array_map(
+            'intval',
+            $data['vihara_ids'] ?? (isset($data['vihara_id']) && $data['vihara_id'] ? [$data['vihara_id']] : []),
+        )));
+
+        if (! $actor->isGlobalScope()) {
+            if ($scopeType === User::SCOPE_GLOBAL) {
+                abort(403, 'Hanya admin global yang boleh membuat akun berakses global.');
+            }
+            if ($actor->entity_id === null) {
+                abort(403, 'Akun Anda tidak terikat ke yayasan mana pun.');
+            }
+            if ($entityId !== null && (int) $entityId !== (int) $actor->entity_id) {
+                abort(403, 'Anda hanya boleh mengelola pengguna di yayasan Anda sendiri.');
+            }
+            $entityId = (int) $actor->entity_id;
+
+            $allowed = $actor->allowedViharaIds() ?? [];
+            foreach ($viharaIds as $id) {
+                if (! in_array($id, $allowed, true)) {
+                    abort(403, 'Anda tidak memiliki akses ke salah satu vihara yang dipilih.');
+                }
+            }
+        }
+
+        if ($scopeType === User::SCOPE_VIHARA && $viharaIds === []) {
+            abort(422, 'Pilih minimal satu vihara untuk akses tingkat vihara.');
+        }
+        if ($scopeType === User::SCOPE_ENTITY && $entityId === null) {
+            abort(422, 'Pilih yayasan untuk akses tingkat yayasan.');
+        }
+
+        // Vihara yang dipilih harus benar-benar milik yayasan user tsb.
+        if ($scopeType === User::SCOPE_VIHARA && $entityId !== null && $viharaIds !== []) {
+            $mismatch = Vihara::query()
+                ->whereIn('id', $viharaIds)
+                ->where(fn ($q) => $q->where('entity_id', '!=', $entityId)->orWhereNull('entity_id'))
+                ->exists();
+            if ($mismatch) {
+                abort(422, 'Ada vihara yang bukan milik yayasan yang dipilih.');
+            }
+        }
+
+        return [
+            'scope_type' => $scopeType,
+            'entity_id' => $entityId,
+            // Pivot hanya relevan untuk scope vihara.
+            'vihara_ids' => $scopeType === User::SCOPE_VIHARA ? $viharaIds : [],
+        ];
+    }
+
+    /**
      * GET /api/admin/roles — list with permissions count + names
      */
-    public function roles(): JsonResponse
+    public function roles(Request $request): JsonResponse
     {
+        $this->assertCanReadRoleCatalog($request);
+
         $roles = Role::query()->with('permissions:id,name')->orderBy('name')->get();
 
         // Count users per role via direct query (avoid Spatie morphedByMany config lookup quirk)
@@ -123,6 +294,10 @@ class AdminController extends Controller
                 'users_count' => (int) ($userCounts[$r->id] ?? 0),
                 'permissions' => $r->permissions->pluck('name')->values(),
                 'is_protected' => in_array($r->name, ['superadmin']),
+                'description' => RbacSeeder::ROLES[$r->name]['description'] ?? null,
+                // Anjuran untuk form tambah pengguna; penegakan tetap di
+                // users.scope_type, bukan di role.
+                'default_scope' => RbacSeeder::ROLES[$r->name]['default_scope'] ?? User::SCOPE_VIHARA,
             ])
         );
     }
@@ -130,8 +305,10 @@ class AdminController extends Controller
     /**
      * GET /api/admin/permissions — list all permission keys (catalog).
      */
-    public function permissions(): JsonResponse
+    public function permissions(Request $request): JsonResponse
     {
+        $this->assertCanReadRoleCatalog($request);
+
         return response()->json([
             'permissions' => Permission::query()->orderBy('name')->pluck('name')->values(),
             'catalog' => RbacSeeder::PERMISSIONS,

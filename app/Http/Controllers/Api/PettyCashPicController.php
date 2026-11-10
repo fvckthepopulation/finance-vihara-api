@@ -20,9 +20,7 @@ class PettyCashPicController extends Controller
             ->where('active', true)
             ->orderBy('name');
 
-        if ($viharaId = ViharaScopeService::readFilter($request)) {
-            $q->where('vihara_id', $viharaId);
-        }
+        ViharaScopeService::applyScope($q, $request);
 
         return response()->json([
             'data' => $q->get(['id', 'vihara_id', 'name', 'active']),

@@ -29,6 +29,14 @@ class ManualJournalController extends Controller
             ->orderByDesc('entry_date')
             ->orderByDesc('id');
 
+        // Daftar jurnal mengikuti jangkauan akses, sama seperti modul lain.
+        // Tanpa ini pemegang scope vihara melihat jurnal vihara lain —
+        // termasuk jurnal otomatis dari pembayaran/penerimaan mereka, yang
+        // berarti nominal dan keterangan transaksinya ikut terbaca.
+        // includeYayasanLevel: jurnal tingkat yayasan (vihara_id NULL) tetap
+        // terlihat oleh pemegang scope yayasan ke atas.
+        ViharaScopeService::applyScope($q, $request, 'vihara_id', true);
+
         // Sumber jurnal: 'manual' atau jurnal otomatis (pembayaran,
         // penerimaan, petty_cash). Tanpa filter = tampilkan semua.
         if ($source = $request->string('source')->toString()) {
@@ -51,16 +59,73 @@ class ManualJournalController extends Controller
         }
 
         $perPage = max(1, min(100, (int) $request->integer('per_page', 25)));
-        return response()->json($q->paginate($perPage));
+        $halaman = $q->paginate($perPage);
+
+        // Lampirkan ringkasan transaksi SUMBER tiap jurnal.
+        //
+        // Deskripsi tersimpan hanya memuat kode + nama kategori ("Pembayaran
+        // PAY-2611003 — Biaya Operasional Vihara"), yang sama persis untuk
+        // setiap biaya operasional — tidak bisa dipakai membedakan satu
+        // transaksi dari yang lain. Informasi pembedanya diambil dari baris
+        // sumbernya, bukan dari teks itu, supaya jurnal LAMA pun ikut
+        // terbantu tanpa menulis ulang catatan buku besar.
+        $halaman->through(fn ($j) => $j->setAttribute('source', $this->ringkasanSumber($j)));
+
+        return response()->json($halaman);
     }
 
-    public function show(JournalEntry $journalEntry): JsonResponse
+    public function show(Request $request, JournalEntry $journalEntry): JsonResponse
     {
+        // Detail jurnal vihara lain ditolak, bukan sekadar tidak
+        // tercantum di daftar.
+        ViharaScopeService::guardRecord($request, $journalEntry->vihara_id);
+
         // Viewable for any source (manual + auto-posted). Deletion stays
         // manual-only (see destroy()).
         return response()->json(
             $journalEntry->load(['entity:id,code,legal_name', 'vihara:id,code,name', 'lines', 'lines.account:code,name', 'createdBy:id,name', 'postedBy:id,name']),
         );
+    }
+
+    /**
+     * Ringkasan transaksi sumber sebuah jurnal, untuk ditampilkan di daftar.
+     * null bila jurnal manual atau sumbernya sudah tidak ada.
+     */
+    private function ringkasanSumber(JournalEntry $j): ?array
+    {
+        $tipe = $j->reference_type;
+        if ($tipe === null || $tipe === 'manual' || $j->reference_id === null) {
+            return null;
+        }
+
+        // Jurnal pembalik menunjuk dokumen yang sama dengan aslinya.
+        $pembalik = str_ends_with($tipe, '_void');
+        $dasar = $pembalik ? substr($tipe, 0, -5) : $tipe;
+
+        $peta = [
+            'pembayaran' => [\App\Models\Pembayaran::class, 'Pengeluaran'],
+            'penerimaan' => [\App\Models\Penerimaan::class, 'Penerimaan'],
+            'petty_cash' => [\App\Models\PettyCashMovement::class, 'Kas Kecil'],
+        ];
+        if (! isset($peta[$dasar])) {
+            return null;
+        }
+
+        [$kelas, $label] = $peta[$dasar];
+        $row = $kelas::find($j->reference_id);
+        if (! $row) {
+            return null;
+        }
+
+        return [
+            'type' => $dasar,
+            'label' => $pembalik ? $label . ' (pembalik)' : $label,
+            'code' => $row->code ?? null,
+            'name' => $row->name ?? null,
+            'counterparty' => $row->payee_name ?? $row->source_name ?? null,
+            'reference' => $row->reference ?? null,
+            'id' => $row->id,
+        ];
     }
 
     public function store(Request $request): JsonResponse

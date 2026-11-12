@@ -312,16 +312,29 @@ class RbacSeeder extends Seeder
         ];
 
         foreach ($demo as $u) {
-            $user = User::updateOrCreate(
-                ['email' => $u['email']],
-                [
-                    'name' => $u['name'],
-                    'password' => Hash::make('password'),
-                    'email_verified_at' => now(),
-                    'entity_id' => $entityId,
-                    'scope_type' => $u['scope'],
-                ],
-            );
+            $user = User::firstOrNew(['email' => $u['email']]);
+
+            // PASSWORD HANYA DISET SAAT AKUN BARU DIBUAT.
+            //
+            // Sebelumnya blok ini memakai updateOrCreate dengan
+            // Hash::make('password') di dalamnya, sehingga MENJALANKAN SEEDER
+            // DI INSTANCE YANG SUDAH HIDUP mengembalikan password seluruh
+            // akun ke 'password'. Itu benar-benar terjadi di produksi: seeder
+            // dijalankan untuk menambah permission baru, dan password yang
+            // sudah diamankan ikut tertimpa.
+            //
+            // Seeder harus aman dijalankan ulang. Menambah permission atau
+            // role tidak boleh menyentuh kredensial yang sudah ada.
+            if (! $user->exists) {
+                $user->password = Hash::make('password');
+                $user->email_verified_at = now();
+            }
+
+            $user->name = $u['name'];
+            $user->entity_id = $entityId;
+            $user->scope_type = $u['scope'];
+            $user->save();
+
             $user->syncRoles([$u['role']]);
             $user->viharas()->sync(array_values(array_filter($u['viharas'])));
         }

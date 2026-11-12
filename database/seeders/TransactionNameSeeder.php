@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\TransactionName;
+use App\Models\Vihara;
 use Illuminate\Database\Seeder;
 
 /**
@@ -97,15 +98,40 @@ class TransactionNameSeeder extends Seeder
 
     public function run(): void
     {
+        // Aturan yang SAMA dengan migrasi 2026_11_10_130000: nama yang
+        // berakhir dengan kode vihara adalah milik vihara itu. Harus ada di
+        // dua tempat karena keduanya jalur yang berbeda — migrasi mengurus
+        // database yang sudah berisi data, seeder mengurus instalasi baru.
+        // Pada `migrate --seed` backfill migrasi tidak menemukan apa-apa
+        // (tabelnya masih kosong saat itu), jadi tanpa bagian ini instalasi
+        // baru lahir tanpa pembatasan per vihara sama sekali.
+        $viharaIdByCode = Vihara::query()->pluck('id', 'code');
+
         foreach (self::NAMES as $type => $categories) {
             foreach ($categories as $category => $names) {
                 foreach ($names as $name) {
                     TransactionName::updateOrCreate(
                         ['type' => $type, 'name' => $name],
-                        ['category' => $category, 'active' => true],
+                        [
+                            'category' => $category,
+                            'active' => true,
+                            'vihara_id' => self::viharaFor($name, $viharaIdByCode),
+                        ],
                     );
                 }
             }
         }
+    }
+
+    /** null = berlaku untuk semua vihara. */
+    private static function viharaFor(string $name, $viharaIdByCode): ?int
+    {
+        foreach ($viharaIdByCode as $code => $id) {
+            if (str_ends_with($name, ' ' . $code)) {
+                return (int) $id;
+            }
+        }
+
+        return null;
     }
 }

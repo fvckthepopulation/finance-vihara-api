@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Vihara;
+use App\Models\Entity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -54,6 +56,48 @@ class AuthController extends Controller
      *
      * @return array<string, mixed>
      */
+    /**
+     * GET /api/my-scope — yayasan & vihara yang boleh dipakai pengguna ini
+     * untuk BERTRANSAKSI.
+     *
+     * Sengaja terpisah dari /api/entities dan /api/viharas. Kedua endpoint itu
+     * adalah master data dan dijaga izin `entities.view` / `masters.view`;
+     * banyak role operasional tidak memilikinya. Kalau form transaksi
+     * bergantung ke sana, pengguna dengan role seperti itu mendapat dropdown
+     * terkunci dan KOSONG tanpa penjelasan — tidak bisa bertransaksi sama
+     * sekali, padahal jangkauan aksesnya jelas.
+     *
+     * Di sini tidak ada izin tambahan: yang dikembalikan adalah jangkauan
+     * pengguna itu sendiri, bukan katalog master. Batasannya tetap sama
+     * dengan ViharaScopeService.
+     */
+    public function scopeOptions(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $viharaIds = $user->allowedViharaIds();
+
+        $viharaQuery = Vihara::query()->where('active', true)->orderBy('name');
+        if ($viharaIds !== null) {
+            $viharaQuery->whereIn('id', $viharaIds);
+        }
+        $viharas = $viharaQuery->get(['id', 'code', 'name', 'entity_id']);
+
+        $entityQuery = Entity::query()->where('active', true)->orderBy('legal_name');
+        if (! $user->isGlobalScope()) {
+            // Yayasan sendiri, ditambah yayasan dari vihara yang ditugaskan —
+            // keduanya biasanya sama, tapi tidak dijamin.
+            $ids = array_values(array_unique(array_filter(
+                array_merge([$user->entity_id], $viharas->pluck('entity_id')->all()),
+            )));
+            $entityQuery->whereIn('id', $ids ?: [0]);
+        }
+
+        return response()->json([
+            'entities' => $entityQuery->get(['id', 'code', 'legal_name']),
+            'viharas' => $viharas,
+        ]);
+    }
+
     private static function profile(User $user): array
     {
         $viharaIds = $user->allowedViharaIds();

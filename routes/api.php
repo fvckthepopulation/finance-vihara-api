@@ -37,6 +37,9 @@ Route::prefix('webhooks/km')
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
+    // Jangkauan akses pengguna sendiri — dipakai form transaksi. Tanpa
+    // izin tambahan: ini bukan katalog master, melainkan batas akun itu.
+    Route::get('/my-scope', [AuthController::class, 'scopeOptions']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
     // Dashboard summary — semua role terautentikasi boleh lihat ringkasan.
@@ -44,15 +47,23 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // --- Kas/Bank + Petty Cash + Rekonsiliasi ---
 
-    // Master dropdowns dipakai semua halaman transaksi.
+    // Lookup yang DIBUTUHKAN untuk bertransaksi: nama transaksi, rekening
+    // vihara, dan PIC kas kecil. Dulu ketiganya ikut dijaga `masters.view`,
+    // sehingga setiap role operasional wajib diberi izin master hanya agar
+    // dropdown form terisi — dan role buatan tangan yang tidak diberi izin
+    // itu mendapat form kosong tanpa penjelasan. Ketiganya read-only dan
+    // sudah disaring per vihara oleh ViharaScopeService, jadi cukup
+    // autentikasi. Yang MENGUBAH master tetap butuh `masters.manage`.
+    Route::get('/masters/transaction-names', [MasterController::class, 'transactionNames']);
+    Route::get('/masters/vihara-bank-accounts', [ViharaBankAccountController::class, 'index']);
+    Route::get('/masters/petty-cash-pics', [PettyCashPicController::class, 'index']);
+
+    // Katalog master yang lebih luas — tetap butuh izin master.
     Route::middleware('can:masters.view')->group(function () {
         Route::get('/masters/entities', [MasterController::class, 'entities']);
         Route::get('/masters/accounts', [MasterController::class, 'accounts']);
         Route::get('/masters/bank-accounts', [MasterController::class, 'bankAccounts']);
         Route::get('/masters/payees', [MasterController::class, 'payees']);
-        Route::get('/masters/transaction-names', [MasterController::class, 'transactionNames']);
-        Route::get('/masters/vihara-bank-accounts', [ViharaBankAccountController::class, 'index']);
-        Route::get('/masters/petty-cash-pics', [PettyCashPicController::class, 'index']);
     });
 
     // Master rekening bank + PIC kas kecil per vihara (CRUD admin).

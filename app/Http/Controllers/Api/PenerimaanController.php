@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\VoidService;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\Penerimaan;
@@ -299,8 +300,43 @@ class PenerimaanController extends Controller
         ]);
     }
 
-    public function destroy(Penerimaan $penerimaan): JsonResponse
+    /**
+     * POST .../{id}/void — batalkan transaksi yang sudah terposting.
+     *
+     * Bukan penghapusan: VoidService menulis jurnal pembalik dan meninggalkan
+     * jejak siapa/kapan/alasan. Lihat layanan itu untuk alasan tanggal
+     * pembalik mengikuti tanggal asli, bukan hari ini.
+     */
+    public function void(Request $request, Penerimaan $penerimaan): JsonResponse
     {
+        ViharaScopeService::guardRecord($request, $penerimaan->vihara_id);
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'min:3', 'max:255'],
+        ], [
+            'reason.required' => 'Alasan pembatalan wajib diisi.',
+            'reason.min' => 'Alasan pembatalan terlalu singkat.',
+        ]);
+
+        VoidService::void($penerimaan, $request->user(), $data['reason'], 'Penerimaan');
+
+        return response()->json($penerimaan->fresh());
+    }
+
+    public function destroy(Request $request, Penerimaan $penerimaan): JsonResponse
+    {
+        // Draft milik vihara lain bukan urusan pengguna ini. Tanpa ini,
+        // siapa pun yang boleh mencatat di viharanya sendiri bisa
+        // menghapus draft vihara lain hanya dengan menebak id.
+        ViharaScopeService::guardRecord($request, $penerimaan->vihara_id);
+
+        // Pencatat boleh membuang draftnya sendiri; penyetuju boleh
+        // menolak draft orang lain. Keduanya hanya draft.
+        $u = $request->user();
+        if (! $u->can('penerimaan.create') && ! $u->can('penerimaan.approve')) {
+            abort(403, 'Anda tidak berhak menghapus draft penerimaan.');
+        }
+
         if ($penerimaan->status !== 'draft') {
             return response()->json(['message' => 'Hanya penerimaan draft yang bisa dihapus.'], 422);
         }

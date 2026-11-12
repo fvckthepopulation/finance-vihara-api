@@ -316,9 +316,19 @@ class AdminController extends Controller
     {
         $this->assertCanReadRoleCatalog($request);
 
+        // Hak yang tidak mengatur apa pun disembunyikan dari matrix supaya
+        // penyusun role tidak mengira sudah membatasi sesuatu — lihat
+        // RbacSeeder::HIDDEN_PERMISSIONS.
+        $tersembunyi = RbacSeeder::HIDDEN_PERMISSIONS;
+
         return response()->json([
-            'permissions' => Permission::query()->orderBy('name')->pluck('name')->values(),
-            'catalog' => RbacSeeder::PERMISSIONS,
+            'permissions' => Permission::query()->orderBy('name')->pluck('name')
+                ->reject(fn ($n) => in_array($n, $tersembunyi, true))->values(),
+            'catalog' => array_values(array_diff(RbacSeeder::PERMISSIONS, $tersembunyi)),
+            'descriptions' => RbacSeeder::PERMISSION_DESCRIPTIONS,
+            // Dikirim apa adanya supaya UI bisa menjelaskan kalau sebuah role
+            // lama masih memegangnya.
+            'hidden' => $tersembunyi,
         ]);
     }
 

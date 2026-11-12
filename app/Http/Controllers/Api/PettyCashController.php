@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\VoidService;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\PettyCashMovement;
@@ -290,8 +291,36 @@ class PettyCashController extends Controller
         return response()->json($pettyCashMovement->fresh()->load('journalEntry.lines'));
     }
 
-    public function destroy(PettyCashMovement $pettyCashMovement): JsonResponse
+    /**
+     * POST .../{id}/void — batalkan transaksi yang sudah terposting.
+     *
+     * Bukan penghapusan: VoidService menulis jurnal pembalik dan meninggalkan
+     * jejak siapa/kapan/alasan. Lihat layanan itu untuk alasan tanggal
+     * pembalik mengikuti tanggal asli, bukan hari ini.
+     */
+    public function void(Request $request, PettyCashMovement $pettyCashMovement): JsonResponse
     {
+        ViharaScopeService::guardRecord($request, $pettyCashMovement->vihara_id);
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'min:3', 'max:255'],
+        ], [
+            'reason.required' => 'Alasan pembatalan wajib diisi.',
+            'reason.min' => 'Alasan pembatalan terlalu singkat.',
+        ]);
+
+        VoidService::void($pettyCashMovement, $request->user(), $data['reason'], 'Mutasi kas kecil');
+
+        return response()->json($pettyCashMovement->fresh());
+    }
+
+    public function destroy(Request $request, PettyCashMovement $pettyCashMovement): JsonResponse
+    {
+        // Draft milik vihara lain bukan urusan pengguna ini. Tanpa ini,
+        // siapa pun yang boleh mencatat di viharanya sendiri bisa
+        // menghapus draft vihara lain hanya dengan menebak id.
+        ViharaScopeService::guardRecord($request, $pettyCashMovement->vihara_id);
+
         if ($pettyCashMovement->status !== 'draft') {
             return response()->json(['message' => 'Hanya movement draft yang bisa dihapus.'], 422);
         }

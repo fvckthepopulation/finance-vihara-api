@@ -30,6 +30,69 @@ class RbacSeeder extends Seeder
      * Format: <module>.<resource>.<action>. Mirrors the sidebar SECTIONS
      * layout in the frontend.
      */
+    /**
+     * Keterangan tiap hak, ditampilkan di matrix Admin -> Roles.
+     *
+     * Tanpa ini penyusun role harus menebak cakupan sebuah key — paling nyata
+     * pada masters.manage, yang namanya tidak menjelaskan master apa saja
+     * yang dicakup.
+     */
+    public const PERMISSION_DESCRIPTIONS = [
+        'cash.view' => 'Lihat saldo & mutasi kas dan bank.',
+        'cash.account.manage' => 'Kelola master rekening kas/bank.',
+        'reconcile.view' => 'Lihat rekonsiliasi bank.',
+        'reconcile.import' => 'Unggah rekening koran dan hapus barisnya.',
+        'reconcile.match' => 'Cocokkan mutasi, termasuk reklasifikasi suspense 2310.',
+        'reconcile.finalize' => 'Selesaikan (kunci) satu run rekonsiliasi.',
+        'petty_cash.view' => 'Lihat saldo dan mutasi kas kecil.',
+        'petty_cash.declare' => 'Catat penggunaan kas kecil, dan hapus yang masih draft.',
+        'petty_cash.approve' => 'Setujui deklarasi kas kecil.',
+        'petty_cash.replenish' => 'Isi kembali kas kecil.',
+        'petty_cash.void' => 'Batalkan mutasi kas kecil terposting (jurnal pembalik).',
+        'pembayaran.view' => 'Lihat pengeluaran.',
+        'pembayaran.create' => 'Catat pengeluaran, dan hapus yang masih draft.',
+        'pembayaran.approve' => 'Setujui / posting pengeluaran.',
+        'pembayaran.void' => 'Batalkan pengeluaran terposting (jurnal pembalik).',
+        'penerimaan.view' => 'Lihat penerimaan.',
+        'penerimaan.create' => 'Catat penerimaan, dan hapus yang masih draft.',
+        'penerimaan.approve' => 'Setujui / posting penerimaan.',
+        'penerimaan.void' => 'Batalkan penerimaan terposting (jurnal pembalik).',
+        'reports.pl.view' => 'Lihat seluruh laporan ISAK 35 (posisi keuangan, penghasilan komprehensif, perubahan aset neto, arus kas, CALK), Laporan Penerimaan Dana, neraca saldo, dan Konsolidasi Yayasan. Konsolidasi tetap butuh jangkauan akses tingkat yayasan.',
+        'reports.balance_sheet.view' => 'Lihat neraca ringkas.',
+        'reports.export' => 'Unduh laporan ke Excel.',
+        'anggaran.view' => 'Lihat anggaran.',
+        'anggaran.manage' => 'Susun dan ubah anggaran.',
+        'tax.view' => 'Lihat rekap pajak.',
+        'tax.compliance.manage' => 'Kelola kepatuhan pajak.',
+        'journal.view' => 'Lihat jurnal dan buku besar.',
+        'journal.create' => 'Buat jurnal manual, dan hapus yang masih draft.',
+        'journal.approve' => 'Posting jurnal manual.',
+        'journal.void' => 'Batalkan jurnal terposting (jurnal pembalik).',
+        'entities.view' => 'Lihat daftar yayasan.',
+        'entities.manage' => 'Tambah, ubah, hapus yayasan.',
+        'users.manage' => 'Kelola pengguna dan jangkauan aksesnya.',
+        'roles.manage' => 'Kelola role dan isi matrix ini.',
+        'coa.view' => 'Lihat Chart of Accounts.',
+        'coa.manage' => 'Ubah Chart of Accounts.',
+        'masters.view' => 'Lihat master: vihara, akun kas/bank, yayasan, penerima (payee).',
+        'masters.manage' => 'Kelola master: vihara (termasuk verifikasi), rekening bank vihara, dan PIC kas kecil.',
+    ];
+
+    /**
+     * Hak yang SENGAJA disembunyikan dari matrix.
+     *
+     * period.* ada di katalog sejak awal tapi tidak dipakai di mana pun —
+     * nol route, nol halaman, nol middleware. Yang benar-benar menjaga
+     * periode adalah PeriodLockService, yang bekerja tanpa izin ini.
+     * Menampilkannya membuat penyusun role mengira sudah mengatur sesuatu.
+     * Dibuka kembali bila fitur Tutup Buku jadi dikerjakan.
+     */
+    public const HIDDEN_PERMISSIONS = [
+        'period.view',
+        'period.close',
+        'period.reopen',
+    ];
+
     public const PERMISSIONS = [
         // Kas & Bank — multi-rekening
         'cash.view',
@@ -46,16 +109,19 @@ class RbacSeeder extends Seeder
         'petty_cash.declare',               // submit deklarasi pengeluaran
         'petty_cash.approve',
         'petty_cash.replenish',             // isi kembali imprest
+        'petty_cash.void',
 
         // Pembayaran (operasional out)
         'pembayaran.view',
         'pembayaran.create',
         'pembayaran.approve',
+        'pembayaran.void',                 // batalkan yg sudah terposting
 
         // Penerimaan (dana in)
         'penerimaan.view',
         'penerimaan.create',
         'penerimaan.approve',
+        'penerimaan.void',
 
         // Laporan keuangan
         'reports.pl.view',
@@ -74,6 +140,7 @@ class RbacSeeder extends Seeder
         'journal.view',
         'journal.create',
         'journal.approve',
+        'journal.void',
 
         // Accounting period (close / reopen)
         'period.view',

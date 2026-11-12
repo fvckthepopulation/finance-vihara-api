@@ -102,6 +102,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/petty-cash/{pettyCashMovement}/attachment', [PettyCashController::class, 'uploadAttachment'])->middleware('can:petty_cash.declare');
     Route::get('/petty-cash/{pettyCashMovement}/attachment', [PettyCashController::class, 'downloadAttachment'])->middleware('can:petty_cash.view');
     Route::delete('/petty-cash/{pettyCashMovement}', [PettyCashController::class, 'destroy'])->middleware('can:petty_cash.declare');
+    Route::post('/petty-cash/{pettyCashMovement}/void', [PettyCashController::class, 'void'])->middleware('can:petty_cash.void');
 
     // Rekonsiliasi — 3 area: PG Clearing (1160), Bank per rekening fisik,
     // Suspense (2310). Run per (rekening, bulan): lines manual/import,
@@ -158,7 +159,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/pembayaran/{pembayaran}/post', [PembayaranController::class, 'post'])->middleware('can:pembayaran.approve');
     Route::post('/pembayaran/{pembayaran}/attachment', [PembayaranController::class, 'uploadAttachment'])->middleware('can:pembayaran.create');
     Route::get('/pembayaran/{pembayaran}/attachment', [PembayaranController::class, 'downloadAttachment'])->middleware('can:pembayaran.view');
-    Route::delete('/pembayaran/{pembayaran}', [PembayaranController::class, 'destroy'])->middleware('can:pembayaran.create');
+    // Hapus draft: boleh si pencatat (membatalkan kekeliruannya sendiri)
+    // ATAU penyetuju (menolak draft). Diperiksa di controller karena
+    // middleware 'can' hanya menerima satu izin.
+    Route::delete('/pembayaran/{pembayaran}', [PembayaranController::class, 'destroy']);
+    // Pembatalan transaksi terposting — jurnal pembalik, bukan penghapusan.
+    Route::post('/pembayaran/{pembayaran}/void', [PembayaranController::class, 'void'])->middleware('can:pembayaran.void');
 
     // Penerimaan operasional
     Route::get('/penerimaan/categories', [PenerimaanController::class, 'categories'])->middleware('can:penerimaan.view');
@@ -170,13 +176,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/penerimaan/{penerimaan}/reklasifikasi', [PenerimaanController::class, 'reklasifikasi'])->middleware('can:reconcile.match');
     Route::post('/penerimaan/{penerimaan}/attachment', [PenerimaanController::class, 'uploadAttachment'])->middleware('can:penerimaan.create');
     Route::get('/penerimaan/{penerimaan}/attachment', [PenerimaanController::class, 'downloadAttachment'])->middleware('can:penerimaan.view');
-    Route::delete('/penerimaan/{penerimaan}', [PenerimaanController::class, 'destroy'])->middleware('can:penerimaan.create');
+    Route::delete('/penerimaan/{penerimaan}', [PenerimaanController::class, 'destroy']);
+    Route::post('/penerimaan/{penerimaan}/void', [PenerimaanController::class, 'void'])->middleware('can:penerimaan.void');
 
     // Manual Journal Entry
     Route::get('/journal-entries', [ManualJournalController::class, 'index'])->middleware('can:journal.view');
     Route::post('/journal-entries', [ManualJournalController::class, 'store'])->middleware('can:journal.create');
     Route::get('/journal-entries/{journalEntry}', [ManualJournalController::class, 'show'])->middleware('can:journal.view');
     Route::delete('/journal-entries/{journalEntry}', [ManualJournalController::class, 'destroy'])->middleware('can:journal.create');
+    Route::post('/journal-entries/{journalEntry}/void', [ManualJournalController::class, 'void'])->middleware('can:journal.void');
 
     // --- Yayasan (entity) CRUD — puncak hirarki tenant ---
     Route::get('/entities', [EntityController::class, 'index'])->middleware('can:entities.view');

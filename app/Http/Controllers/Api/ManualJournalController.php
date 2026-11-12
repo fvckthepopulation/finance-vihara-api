@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\VoidService;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Services\PeriodLockService;
@@ -145,8 +146,36 @@ class ManualJournalController extends Controller
         return response()->json($entry->load('lines', 'entity:id,code', 'vihara:id,code,name'), 201);
     }
 
-    public function destroy(JournalEntry $journalEntry): JsonResponse
+    /**
+     * POST .../{id}/void — batalkan transaksi yang sudah terposting.
+     *
+     * Bukan penghapusan: VoidService menulis jurnal pembalik dan meninggalkan
+     * jejak siapa/kapan/alasan. Lihat layanan itu untuk alasan tanggal
+     * pembalik mengikuti tanggal asli, bukan hari ini.
+     */
+    public function void(Request $request, JournalEntry $journalEntry): JsonResponse
     {
+        ViharaScopeService::guardRecord($request, $journalEntry->vihara_id);
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'min:3', 'max:255'],
+        ], [
+            'reason.required' => 'Alasan pembatalan wajib diisi.',
+            'reason.min' => 'Alasan pembatalan terlalu singkat.',
+        ]);
+
+        VoidService::void($journalEntry, $request->user(), $data['reason'], 'Jurnal');
+
+        return response()->json($journalEntry->fresh());
+    }
+
+    public function destroy(Request $request, JournalEntry $journalEntry): JsonResponse
+    {
+        // Draft milik vihara lain bukan urusan pengguna ini. Tanpa ini,
+        // siapa pun yang boleh mencatat di viharanya sendiri bisa
+        // menghapus draft vihara lain hanya dengan menebak id.
+        ViharaScopeService::guardRecord($request, $journalEntry->vihara_id);
+
         if ($journalEntry->reference_type !== 'manual') {
             abort(404, 'Bukan manual journal.');
         }

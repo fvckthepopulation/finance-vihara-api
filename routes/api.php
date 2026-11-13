@@ -11,6 +11,8 @@ use App\Http\Controllers\Api\EntityController;
 use App\Http\Controllers\Api\KmReportController;
 use App\Http\Controllers\Api\KasBankController;
 use App\Http\Controllers\Api\ManualJournalController;
+use App\Http\Controllers\Api\MasterPengeluaranController;
+use App\Http\Controllers\Api\PenerimaMasterController;
 use App\Http\Controllers\Api\MasterAccountController;
 use App\Http\Controllers\Api\MasterController;
 use App\Http\Controllers\Api\PettyCashPicController;
@@ -66,11 +68,52 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/masters/payees', [MasterController::class, 'payees']);
     });
 
-    // Master rekening bank + PIC kas kecil per vihara (CRUD admin).
-    Route::middleware('can:masters.manage')->group(function () {
+    // Master Rekening (FV-30) — daftar lintas vihara, termasuk yang nonaktif,
+    // dengan pencarian + pagination. Izinnya ATAU: pemegang master boleh
+    // melihat katalognya, pemegang cash.account.manage memang pengelola
+    // rekening. Jangkauan viharanya tetap diurus ViharaScopeService.
+    Route::get('/master-rekening', [ViharaBankAccountController::class, 'manage'])
+        ->middleware('permission:masters.view|cash.account.manage');
+
+    // CRUD rekening: cash.account.manage sesuai FV-30, tapi pemegang
+    // masters.manage yang sudah mengelolanya sejak awal tidak dicabut.
+    Route::middleware('permission:masters.manage|cash.account.manage')->group(function () {
         Route::post('/viharas/{vihara}/bank-accounts', [ViharaBankAccountController::class, 'store']);
         Route::patch('/vihara-bank-accounts/{viharaBankAccount}', [ViharaBankAccountController::class, 'update']);
         Route::delete('/vihara-bank-accounts/{viharaBankAccount}', [ViharaBankAccountController::class, 'destroy']);
+    });
+
+    // Master Penerima (FV-31). Saran untuk form dan tambah-cepat terbuka untuk
+    // pencatat pengeluaran — kalau dijaga izin master, operator tanpa izin itu
+    // mendapat field tanpa saran sama sekali. Layar masternya tetap dijaga.
+    Route::get('/penerima/suggest', [PenerimaMasterController::class, 'suggest']);
+    Route::post('/penerima/cepat', [PenerimaMasterController::class, 'quickStore'])
+        ->middleware('can:pembayaran.create');
+    Route::get('/penerima', [PenerimaMasterController::class, 'index'])->middleware('can:masters.view');
+    Route::middleware('can:masters.manage')->group(function () {
+        Route::post('/penerima', [PenerimaMasterController::class, 'store']);
+        Route::patch('/penerima/{penerima}', [PenerimaMasterController::class, 'update']);
+        Route::delete('/penerima/{penerima}', [PenerimaMasterController::class, 'destroy']);
+    });
+
+    // Master Pengeluaran (FV-29) — Kategori Biaya + Nama Pengeluaran.
+    // Melihat butuh masters.view; mengubah butuh masters.manage.
+    Route::middleware('can:masters.view')->group(function () {
+        Route::get('/master-pengeluaran/kategori', [MasterPengeluaranController::class, 'kategoriIndex']);
+        Route::get('/master-pengeluaran/nama', [MasterPengeluaranController::class, 'namaIndex']);
+        Route::get('/master-pengeluaran/akun-beban', [MasterPengeluaranController::class, 'akunBeban']);
+    });
+    Route::middleware('can:masters.manage')->group(function () {
+        Route::post('/master-pengeluaran/kategori', [MasterPengeluaranController::class, 'kategoriStore']);
+        Route::patch('/master-pengeluaran/kategori/{kategori}', [MasterPengeluaranController::class, 'kategoriUpdate']);
+        Route::delete('/master-pengeluaran/kategori/{kategori}', [MasterPengeluaranController::class, 'kategoriDestroy']);
+        Route::post('/master-pengeluaran/nama', [MasterPengeluaranController::class, 'namaStore']);
+        Route::patch('/master-pengeluaran/nama/{nama}', [MasterPengeluaranController::class, 'namaUpdate']);
+        Route::delete('/master-pengeluaran/nama/{nama}', [MasterPengeluaranController::class, 'namaDestroy']);
+    });
+
+    // Master PIC kas kecil per vihara (CRUD admin).
+    Route::middleware('can:masters.manage')->group(function () {
         Route::post('/viharas/{vihara}/petty-cash-pics', [PettyCashPicController::class, 'store']);
         Route::patch('/petty-cash-pics/{pettyCashPic}', [PettyCashPicController::class, 'update']);
         Route::delete('/petty-cash-pics/{pettyCashPic}', [PettyCashPicController::class, 'destroy']);
@@ -78,8 +121,19 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Semua Transaksi — riwayat gabungan penerimaan + pembayaran.
     // Gate (penerimaan.view OR pembayaran.view) dicek di controller.
-    Route::get('/transactions', [TransactionController::class, 'index']);
-    Route::get('/transactions/export', [TransactionController::class, 'export']);
+    // Menu Semua Transaksi. Datanya memang sudah disaring per vihara oleh
+    // ViharaScopeService, tapi sebelumnya tidak ada izin sama sekali —
+    // sehingga menunya tak bisa diberikan atau dicabut per role. Unduhan CSV
+    // menumpang reports.export, seperti unduhan laporan lain.
+    Route::get('/transactions', [TransactionController::class, 'index'])->middleware('can:transaksi.view');
+    // Antrean persetujuan memakai data transaksi yang sama, tapi izinnya lain:
+    // role yang HANYA boleh menyetujui tidak perlu diberi transaksi.view hanya
+    // supaya layar Persetujuan-nya hidup. Tanpa rute terpisah ini, mengunci
+    // /transactions dengan transaksi.view (FV-28) mematikan layar Persetujuan
+    // untuk role semacam itu — dan itu benar-benar terjadi di suite e2e.
+    Route::get('/approvals', [TransactionController::class, 'index'])
+        ->middleware('permission:transaksi.view|pembayaran.approve|penerimaan.approve');
+    Route::get('/transactions/export', [TransactionController::class, 'export'])->middleware('can:reports.export');
 
     // Penerimaan Dana Umat — rekap penerimaan posted per kategori dana.
     Route::get('/dana-umat', [DanaUmatController::class, 'index'])->middleware('can:penerimaan.view');
@@ -212,7 +266,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/viharas/{vihara}', [ViharaController::class, 'destroy'])->middleware('can:masters.manage');
 
     // --- Laporan ISAK 35 + Anggaran ---
-    Route::get('/laporan/konsolidasi', [LaporanController::class, 'konsolidasi'])->middleware('can:reports.pl.view');
+    // Konsolidasi punya izinnya sendiri (FV-32), bukan menitip di
+    // reports.pl.view: isinya gabungan seluruh vihara satu yayasan, jadi
+    // aksesnya diatur terpisah dari laporan per vihara. Jangkauan tingkat
+    // yayasan tetap diperiksa di controller (vihara-scope ditolak 403).
+    Route::get('/laporan/konsolidasi', [LaporanController::class, 'konsolidasi'])->middleware('can:konsolidasi.view');
     Route::get('/laporan/isak35', [LaporanController::class, 'isak35'])->middleware('can:reports.pl.view');
     Route::get('/anggaran', [AnggaranController::class, 'index'])->middleware('can:anggaran.view');
     Route::put('/anggaran', [AnggaranController::class, 'upsert'])->middleware('can:anggaran.manage');

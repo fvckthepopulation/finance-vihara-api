@@ -55,10 +55,17 @@ class ManualJournalController extends Controller
             $q->whereDate('entry_date', '<=', $to);
         }
         if ($search = $request->string('q')->toString()) {
-            $q->where('description', 'like', "%{$search}%");
+            // ILIKE: pencarian tidak boleh membedakan huruf besar/kecil (FV-27).
+            // Nomor dokumen sumber ("PAY-2611175") ikut tertulis di deskripsi
+            // jurnalnya, jadi satu kolom ini sudah mencakup nomor dan keterangan.
+            $like = '%' . $search . '%';
+            $q->where(function ($w) use ($like) {
+                $w->where('description', 'ilike', $like)
+                    ->orWhere('reference', 'ilike', $like);
+            });
         }
 
-        $perPage = max(1, min(100, (int) $request->integer('per_page', 25)));
+        $perPage = max(1, min(100, (int) $request->integer('per_page', 20)));
         $halaman = $q->paginate($perPage);
 
         // Lampirkan ringkasan transaksi SUMBER tiap jurnal.
@@ -144,6 +151,10 @@ class ManualJournalController extends Controller
             'lines.*.credit' => ['required', 'numeric', 'min:0'],
             'lines.*.description' => ['sometimes', 'nullable', 'string', 'max:255'],
         ]);
+
+        // Yayasan yang disebut harus yayasan user (FV-34); viharanya sudah
+        // dijaga optionalCreationViharaId (FV-35).
+        ViharaScopeService::guardEntity($request, (int) $data['entity_id']);
 
         $viharaId = ViharaScopeService::optionalCreationViharaId($request);
 

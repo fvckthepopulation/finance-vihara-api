@@ -40,9 +40,20 @@ class AdminController extends Controller
             });
         }
 
+        $kolom = ['id', 'name', 'email', 'entity_id', 'scope_type', 'created_at'];
+
+        // paginate=1 dipakai halaman Admin -> Users. Bentuk lama (array
+        // penuh) dipertahankan supaya pemanggil lain tidak ikut berubah.
+        if ($request->boolean('paginate')) {
+            $perPage = min(max((int) $request->integer('per_page', 20), 1), 100);
+            $hal = $q->paginate($perPage, $kolom);
+            $hal->through(fn (User $u) => $this->userPayload($u));
+
+            return response()->json($hal);
+        }
+
         return response()->json(
-            $q->get(['id', 'name', 'email', 'entity_id', 'scope_type', 'created_at'])
-                ->map(fn (User $u) => $this->userPayload($u)),
+            $q->get($kolom)->map(fn (User $u) => $this->userPayload($u)),
         );
     }
 
@@ -277,7 +288,15 @@ class AdminController extends Controller
     {
         $this->assertCanReadRoleCatalog($request);
 
-        $roles = Role::query()->with('permissions:id,name')->orderBy('name')->get();
+        $q = Role::query()->with('permissions:id,name')->orderBy('name');
+
+        // Pencarian nama role (FV-27). Case-insensitive lewat LOWER supaya
+        // seragam dengan pengurutan di tempat lain.
+        if ($cari = $request->string('q')->toString()) {
+            $q->whereRaw('LOWER(name) LIKE ?', ['%' . mb_strtolower($cari) . '%']);
+        }
+
+        $roles = $q->get();
 
         // Count users per role via direct query (avoid Spatie morphedByMany config lookup quirk)
         $userCounts = \DB::table('model_has_roles')

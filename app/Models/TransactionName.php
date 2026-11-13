@@ -15,7 +15,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * `vihara_id` NULL berarti item berlaku untuk SEMUA vihara; terisi berarti
  * hanya muncul untuk vihara itu.
  */
-#[Fillable(['type', 'category', 'vihara_id', 'name', 'active'])]
+#[Fillable([
+    'type', 'code', 'category', 'vihara_id', 'name', 'coa_account_code',
+    'description', 'active',
+])]
 class TransactionName extends Model
 {
     use SerializesDatesInAppTimezone;
@@ -23,6 +26,42 @@ class TransactionName extends Model
     public function vihara(): BelongsTo
     {
         return $this->belongsTo(Vihara::class);
+    }
+
+    /** Kategori induk di master (FV-29). */
+    public function categoryMaster(): BelongsTo
+    {
+        return $this->belongsTo(TransactionCategory::class, 'category', 'code');
+    }
+
+    /** Akun beban yang dipakai jurnal saat nama ini dipilih (FV-29). */
+    public function coaAccount(): BelongsTo
+    {
+        return $this->belongsTo(Account::class, 'coa_account_code', 'code');
+    }
+
+    /**
+     * Akun debit untuk satu nama pengeluaran: akun nama itu sendiri, dan
+     * kalau belum diisi, akun bawaan kategorinya. Dipakai PembayaranController
+     * saat menentukan jurnal.
+     */
+    public static function akunDebit(string $category, ?string $name): ?string
+    {
+        if ($name !== null) {
+            $akun = static::query()
+                ->where('type', 'pengeluaran')
+                ->where('category', $category)
+                ->where('name', $name)
+                ->value('coa_account_code');
+            if ($akun) {
+                return $akun;
+            }
+        }
+
+        return TransactionCategory::query()
+            ->where('type', TransactionCategory::TYPE_PENGELUARAN)
+            ->where('code', $category)
+            ->value('default_debit_code');
     }
 
     /** Item umum + item milik vihara-vihara ini. $viharaIds null = tanpa batas. */

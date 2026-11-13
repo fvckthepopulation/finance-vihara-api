@@ -42,7 +42,7 @@ class EntityController extends Controller
         }
 
         if ($request->boolean('paginate')) {
-            $perPage = min(max((int) $request->integer('per_page') ?: 24, 1), 100);
+            $perPage = min(max((int) $request->integer('per_page') ?: 20, 1), 100);
 
             return response()->json($q->paginate($perPage));
         }

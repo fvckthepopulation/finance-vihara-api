@@ -41,7 +41,7 @@ class TransactionController extends Controller
             . 'COUNT(*) AS cnt',
         )->first();
 
-        $perPage = min(max($request->integer('per_page') ?: 25, 1), 200);
+        $perPage = min(max($request->integer('per_page') ?: 20, 1), 200);
         $bankLabels = $this->bankLabels();
         // Nama vihara ikut dikirim: tanpa ini klien hanya punya id, dan tabel
         // lintas-vihara tidak bisa menunjukkan baris ini milik vihara mana.
@@ -279,8 +279,8 @@ class TransactionController extends Controller
         if (isset(self::PENERIMAAN_LABELS[$category])) {
             return self::PENERIMAAN_LABELS[$category];
         }
-        if (isset(Pembayaran::CATEGORIES[$category])) {
-            return Pembayaran::CATEGORIES[$category]['label'];
+        if ($label = \App\Models\TransactionCategory::labelPengeluaran($category)) {
+            return $label;
         }
 
         return Penerimaan::CATEGORIES[$category]['label'] ?? ucwords(str_replace('_', ' ', $category));

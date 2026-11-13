@@ -160,6 +160,25 @@ class ViharaScopeService
         self::assertCanAccess($request->user(), $recordViharaId);
     }
 
+    /**
+     * Guard yayasan yang disebut sebuah permintaan (FV-34).
+     *
+     * Jangkauan vihara dijaga ViharaScopeService di mana-mana, tapi
+     * `entity_id` sempat hanya diperiksa ada-tidaknya di tabel. Akibatnya
+     * jurnal manual bisa dicatat ke yayasan lain lewat API, walau dropdown-nya
+     * tidak pernah menampilkan yayasan itu.
+     */
+    public static function guardEntity(Request $request, ?int $entityId): void
+    {
+        $user = $request->user();
+        if ($entityId === null || $user->isGlobalScope()) {
+            return;
+        }
+        if ((int) $entityId !== (int) $user->entity_id) {
+            abort(403, 'Anda tidak memiliki akses ke yayasan tersebut.');
+        }
+    }
+
     /** Guard akses ke data level yayasan (konsolidasi, jurnal pusat). */
     public static function guardYayasanLevel(Request $request): void
     {

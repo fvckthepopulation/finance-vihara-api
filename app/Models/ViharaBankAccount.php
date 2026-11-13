@@ -8,12 +8,22 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
-    'vihara_id', 'bank_name', 'account_number', 'account_name',
-    'coa_account_code', 'active',
+    'vihara_id', 'type', 'bank_name', 'account_number', 'account_name',
+    'coa_account_code', 'description', 'active',
 ])]
 class ViharaBankAccount extends Model
 {
     use SerializesDatesInAppTimezone;
+
+    /** Jenis rekening (FV-30). Kas tunai tidak punya nomor rekening. */
+    public const TYPE_BANK = 'bank';
+
+    public const TYPE_CASH = 'cash';
+
+    public const TYPES = [
+        self::TYPE_BANK => 'Bank',
+        self::TYPE_CASH => 'Kas Tunai',
+    ];
 
     protected function casts(): array
     {
@@ -22,10 +32,14 @@ class ViharaBankAccount extends Model
         ];
     }
 
-    /** Label pendek untuk mutasi/list: "BCA 6280-3488-88". */
+    /** Label pendek untuk mutasi/list: "BCA 6280-3488-88", atau nama kas. */
     public function label(): string
     {
-        $short = preg_replace('/^bank\s+/i', '', $this->bank_name);
+        if ($this->type === self::TYPE_CASH) {
+            return trim($this->bank_name ?: 'Kas Tunai');
+        }
+
+        $short = preg_replace('/^bank\s+/i', '', (string) $this->bank_name);
 
         return trim("{$short} {$this->account_number}");
     }

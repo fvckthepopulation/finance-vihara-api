@@ -7,6 +7,8 @@ use App\Services\VoidService;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\Pembayaran;
+use App\Models\TransactionCategory;
+use App\Models\TransactionName;
 use App\Services\PeriodLockService;
 use App\Services\ViharaScopeService;
 use Illuminate\Http\JsonResponse;
@@ -101,7 +103,12 @@ class PembayaranController extends Controller
             'source_account_code' => ['sometimes', 'nullable', 'exists:accounts,code'],
             'category' => [
                 Rule::requiredIf(! $draft),
-                'nullable', 'in:' . implode(',', array_keys(Pembayaran::CATEGORIES)),
+                'nullable',
+                // Kategori diambil dari master (FV-29), bukan konstanta: yang
+                // dinonaktifkan admin tidak boleh dipakai transaksi baru.
+                Rule::exists('transaction_categories', 'code')
+                    ->where('type', TransactionCategory::TYPE_PENGELUARAN)
+                    ->where('active', true),
             ],
             'name' => [
                 'sometimes', 'nullable', 'string', 'max:255',
@@ -171,7 +178,13 @@ class PembayaranController extends Controller
         PeriodLockService::guard($data['entity_id'], $data['date'], 'date');
 
         if (empty($data['debit_account_code']) && ! empty($data['category'])) {
-            $data['debit_account_code'] = Pembayaran::CATEGORIES[$data['category']]['default_debit'];
+            // Akun beban mengikuti Nama Pengeluaran yang dipilih (FV-29);
+            // kalau nama itu belum punya akun sendiri, dipakai akun bawaan
+            // kategorinya dari master.
+            $data['debit_account_code'] = TransactionName::akunDebit(
+                $data['category'],
+                $data['name'] ?? null,
+            );
         }
         if (! empty($data['source_account_code'])
             && $data['source_account_code'] === ($data['debit_account_code'] ?? null)) {
@@ -214,7 +227,8 @@ class PembayaranController extends Controller
         }
 
         DB::transaction(function () use ($pembayaran, $request) {
-            $desc = "Pembayaran {$pembayaran->code} — " . (Pembayaran::CATEGORIES[$pembayaran->category]['label'] ?? $pembayaran->category);
+            $desc = "Pembayaran {$pembayaran->code} — "
+                . (TransactionCategory::labelPengeluaran($pembayaran->category) ?? $pembayaran->category);
 
             $journal = JournalEntry::create([
                 'entity_id' => $pembayaran->entity_id,
@@ -318,7 +332,12 @@ class PembayaranController extends Controller
         $data = $request->validate([
             'date' => ['sometimes', 'date'],
             'bank_account_id' => ['sometimes', 'nullable', 'integer', 'exists:vihara_bank_accounts,id'],
-            'category' => ['sometimes', 'nullable', 'in:' . implode(',', array_keys(Pembayaran::CATEGORIES))],
+            'category' => [
+                'sometimes', 'nullable',
+                Rule::exists('transaction_categories', 'code')
+                    ->where('type', TransactionCategory::TYPE_PENGELUARAN)
+                    ->where('active', true),
+            ],
             'name' => ['sometimes', 'nullable', 'string', 'max:255'],
             'payee_name' => ['sometimes', 'nullable', 'string', 'max:255'],
             'reference' => ['sometimes', 'nullable', 'string', 'max:100'],
@@ -336,7 +355,10 @@ class PembayaranController extends Controller
             $data['source_account_code'] = $rek->coa_account_code;
         }
         if (! empty($data['category'])) {
-            $data['debit_account_code'] = Pembayaran::CATEGORIES[$data['category']]['default_debit'];
+            $data['debit_account_code'] = TransactionName::akunDebit(
+                $data['category'],
+                $data['name'] ?? $pembayaran->name,
+            );
         }
 
         $pembayaran->fill($data)->save();
@@ -415,12 +437,24 @@ class PembayaranController extends Controller
         return Storage::disk('local')->response($pembayaran->attachment_path);
     }
 
+    /**
+     * Pilihan Kategori Biaya untuk form. Sumbernya master (FV-29) dan hanya
+     * yang aktif — kategori yang dinonaktifkan admin langsung hilang dari
+     * dropdown tanpa menyentuh transaksi lama.
+     */
     public function categories(): JsonResponse
     {
-        $rows = [];
-        foreach (Pembayaran::CATEGORIES as $key => $meta) {
-            $rows[] = ['key' => $key, 'label' => $meta['label'], 'default_debit' => $meta['default_debit']];
-        }
+        $rows = TransactionCategory::query()
+            ->where('type', TransactionCategory::TYPE_PENGELUARAN)
+            ->where('active', true)
+            ->orderBy('name')
+            ->get(['code', 'name', 'default_debit_code'])
+            ->map(fn (TransactionCategory $c) => [
+                'key' => $c->code,
+                'label' => $c->name,
+                'default_debit' => $c->default_debit_code,
+            ]);
+
         return response()->json($rows);
     }
 

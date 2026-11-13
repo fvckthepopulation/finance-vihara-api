@@ -57,8 +57,10 @@ class RbacSeeder extends Seeder
         'penerimaan.create' => 'Catat penerimaan, dan hapus yang masih draft.',
         'penerimaan.approve' => 'Setujui / posting penerimaan.',
         'penerimaan.void' => 'Batalkan penerimaan terposting (jurnal pembalik).',
+        'transaksi.view' => 'Buka menu Semua Transaksi (riwayat penerimaan + pengeluaran). Isinya tetap dibatasi jangkauan akses akun; mengunduh CSV butuh reports.export.',
         'reports.pl.view' => 'Lihat seluruh laporan ISAK 35 (posisi keuangan, penghasilan komprehensif, perubahan aset neto, arus kas, CALK), Laporan Penerimaan Dana, neraca saldo, dan Konsolidasi Yayasan. Konsolidasi tetap butuh jangkauan akses tingkat yayasan.',
         'reports.balance_sheet.view' => 'Lihat neraca ringkas.',
+        'konsolidasi.view' => 'Buka menu Konsolidasi Yayasan — gabungan keuangan seluruh vihara dalam satu yayasan. Tetap butuh jangkauan akses tingkat yayasan: user berjangkauan Vihara tidak bisa melihatnya walau izin ini dicentang.',
         'reports.export' => 'Unduh laporan ke Excel.',
         'anggaran.view' => 'Lihat anggaran.',
         'anggaran.manage' => 'Susun dan ubah anggaran.',
@@ -119,14 +121,19 @@ class RbacSeeder extends Seeder
 
         // Penerimaan (dana in)
         'penerimaan.view',
+                'transaksi.view',
         'penerimaan.create',
         'penerimaan.approve',
         'penerimaan.void',
+
+        // Riwayat transaksi gabungan (menu Semua Transaksi)
+        'transaksi.view',
 
         // Laporan keuangan
         'reports.pl.view',
         'reports.balance_sheet.view',
         'reports.export',                   // unduh Excel
+        'konsolidasi.view',                 // menu Konsolidasi Yayasan
 
         // Anggaran (budget per vihara per tahun)
         'anggaran.view',
@@ -180,8 +187,10 @@ class RbacSeeder extends Seeder
                 'reconcile.view', 'reconcile.import', 'reconcile.match', 'reconcile.finalize',
                 'petty_cash.view', 'petty_cash.declare', 'petty_cash.approve', 'petty_cash.replenish',
                 'pembayaran.view', 'pembayaran.create', 'pembayaran.approve',
-                'penerimaan.view', 'penerimaan.create', 'penerimaan.approve',
+                'penerimaan.view',
+                'transaksi.view', 'penerimaan.create', 'penerimaan.approve',
                 'reports.pl.view', 'reports.balance_sheet.view', 'reports.export',
+                'konsolidasi.view',
                 'anggaran.view', 'anggaran.manage',
                 'tax.view', 'tax.compliance.manage',
                 'journal.view', 'journal.create', 'journal.approve',
@@ -201,8 +210,10 @@ class RbacSeeder extends Seeder
                 'petty_cash.view',
                 'pembayaran.view',
                 'penerimaan.view',
+                'transaksi.view',
                 'journal.view',
                 'reports.pl.view', 'reports.balance_sheet.view', 'reports.export',
+                'konsolidasi.view',
                 'anggaran.view',
                 'tax.view',
                 'period.view',
@@ -218,7 +229,8 @@ class RbacSeeder extends Seeder
                 'reconcile.view', 'reconcile.import',
                 'petty_cash.view', 'petty_cash.declare',
                 'pembayaran.view', 'pembayaran.create',
-                'penerimaan.view', 'penerimaan.create',
+                'penerimaan.view',
+                'transaksi.view', 'penerimaan.create',
                 'journal.view',
                 'reports.pl.view', 'reports.balance_sheet.view',
                 'anggaran.view', 'anggaran.manage',
@@ -235,7 +247,8 @@ class RbacSeeder extends Seeder
                 'reconcile.view', 'reconcile.match', 'reconcile.finalize',
                 'petty_cash.view', 'petty_cash.approve', 'petty_cash.replenish',
                 'pembayaran.view', 'pembayaran.approve',
-                'penerimaan.view', 'penerimaan.approve',
+                'penerimaan.view',
+                'transaksi.view', 'penerimaan.approve',
                 'journal.view', 'journal.approve',
                 'reports.pl.view', 'reports.balance_sheet.view', 'reports.export',
                 'anggaran.view',
@@ -254,6 +267,7 @@ class RbacSeeder extends Seeder
                 'petty_cash.view',
                 'pembayaran.view',
                 'penerimaan.view',
+                'transaksi.view',
                 'journal.view',
                 'reports.pl.view', 'reports.balance_sheet.view',
                 'anggaran.view',

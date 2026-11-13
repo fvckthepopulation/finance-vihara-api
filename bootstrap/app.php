@@ -13,7 +13,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Alias Spatie: 'permission' menerima beberapa izin dengan arti ATAU
+        // ("a|b"), yang tidak bisa dilakukan middleware 'can' bawaan Laravel.
+        // Dipakai antrean persetujuan — lihat routes/api.php.
+        $middleware->alias([
+            'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

@@ -53,7 +53,7 @@ class MasterAccountController extends Controller
         ];
 
         if ($request->boolean('paginate')) {
-            $perPage = max(1, min(100, (int) $request->integer('per_page', 25)));
+            $perPage = max(1, min(100, (int) $request->integer('per_page', 20)));
             $page = $q->paginate($perPage);
             $usage = $this->bulkUsage($page->getCollection()->pluck('code'));
             $page->getCollection()->transform(fn ($a) => $mapRow($a, $usage));

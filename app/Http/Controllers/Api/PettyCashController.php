@@ -46,6 +46,16 @@ class PettyCashController extends Controller
         if ($type = $request->string('type')->toString()) {
             $query->where('type', $type);
         }
+        // Pencarian (FV-27): keterangan, no. bukti, dan nama PIC.
+        if ($cari = $request->string('q')->toString()) {
+            $like = '%' . mb_strtolower($cari) . '%';
+            $query->where(function ($w) use ($like) {
+                $w->whereRaw('LOWER(description) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(reference) LIKE ?', [$like])
+                    ->orWhereHas('pic', fn ($p) => $p->whereRaw('LOWER(name) LIKE ?', [$like]));
+            });
+        }
+
         if ($entityId = $request->integer('entity_id')) {
             $query->where('entity_id', $entityId);
         }
@@ -54,7 +64,9 @@ class PettyCashController extends Controller
             $query->whereRaw("to_char(movement_date, 'YYYY-MM') = ?", [$month]);
         }
 
-        $paginator = $query->paginate(25)->through(function (PettyCashMovement $m) {
+        // Jumlah baris mengikuti pilihan pengguna (FV-26), dibatasi 1..100.
+        $perPage = min(max((int) $request->integer('per_page', 20), 1), 100);
+        $paginator = $query->paginate($perPage)->through(function (PettyCashMovement $m) {
             return $m->toArray() + [
                 'pic_name' => $m->pic?->name,
                 'source_bank_label' => $m->sourceBankAccount?->label(),

@@ -37,7 +37,7 @@ Route::prefix('webhooks/km')
         Route::post('/settlements', [\App\Http\Controllers\Api\KmWebhookController::class, 'settlement']);
     });
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'user.aktif'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     // Jangkauan akses pengguna sendiri — dipakai form transaksi. Tanpa
     // izin tambahan: ini bukan katalog master, melainkan batas akun itu.
@@ -78,7 +78,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // CRUD rekening: cash.account.manage sesuai FV-30, tapi pemegang
     // masters.manage yang sudah mengelolanya sejak awal tidak dicabut.
     Route::middleware('permission:masters.manage|cash.account.manage')->group(function () {
-        Route::post('/viharas/{vihara}/bank-accounts', [ViharaBankAccountController::class, 'store']);
+        // Rekening milik yayasan, bukan vihara (FV-36).
+        Route::post('/entities/{entity}/bank-accounts', [ViharaBankAccountController::class, 'store']);
         Route::patch('/vihara-bank-accounts/{viharaBankAccount}', [ViharaBankAccountController::class, 'update']);
         Route::delete('/vihara-bank-accounts/{viharaBankAccount}', [ViharaBankAccountController::class, 'destroy']);
     });

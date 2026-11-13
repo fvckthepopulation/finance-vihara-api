@@ -180,13 +180,16 @@ class PettyCashController extends Controller
             ], 422);
         }
 
-        $counterpart = $data['subtype'] === 'usage' ? '6100' : '1115';
+        // Penggunaan kas kecil = Beban Lainnya 6300, bukan Biaya Operasional
+        // Vihara 6100: beban kas kecil harus terpisah dari biaya operasional
+        // yang diinput lewat Input Pengeluaran (P-18 di skenario uji).
+        $counterpart = $data['subtype'] === 'usage' ? '6300' : '1115';
         if (! empty($data['source_bank_account_id'])) {
             $bankAccount = ViharaBankAccount::find($data['source_bank_account_id']);
-            if ((int) $bankAccount->vihara_id !== (int) $viharaId) {
+            if (! $bankAccount->bolehDipakaiVihara((int) $viharaId)) {
                 return response()->json([
-                    'message' => 'Rekening bank bukan milik vihara transaksi ini.',
-                    'errors' => ['source_bank_account_id' => ['Rekening bank bukan milik vihara transaksi ini.']],
+                    'message' => 'Rekening ini tidak boleh dipakai vihara transaksi ini.',
+                    'errors' => ['source_bank_account_id' => ['Rekening ini tidak boleh dipakai vihara transaksi ini.']],
                 ], 422);
             }
             $counterpart = $bankAccount->coa_account_code;

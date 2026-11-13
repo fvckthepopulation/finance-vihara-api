@@ -29,6 +29,16 @@ class AuthController extends Controller
             ]);
         }
 
+        // Akun nonaktif: ditolak sebelum token dibuat, dan alasannya disebut —
+        // kalau pesannya sama dengan salah sandi, orangnya akan mencoba
+        // berkali-kali tanpa tahu akunnya memang sudah dimatikan (C-ADM-05).
+        if (! $user->active) {
+            throw ValidationException::withMessages([
+                'email' => ['Akun ini nonaktif. Hubungi admin.'],
+            ]);
+        }
+
+        // Token lama dari sesi sebelumnya tidak dibiarkan menumpuk.
         $token = $user->createToken($data['device_name'] ?? 'web')->plainTextToken;
 
         return response()->json([

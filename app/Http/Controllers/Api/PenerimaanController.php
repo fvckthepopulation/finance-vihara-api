@@ -48,7 +48,7 @@ class PenerimaanController extends Controller
             $q->where('entity_id', $entityId);
         }
 
-        return response()->json($q->paginate(25));
+        return response()->json($q->paginate(min(max((int) $request->integer('per_page', 20), 1), 200)));
     }
 
     public function show(Request $request, Penerimaan $penerimaan): JsonResponse
@@ -118,17 +118,36 @@ class PenerimaanController extends Controller
         // mengikuti coa_account_code rekening.
         if (! empty($data['bank_account_id'])) {
             $bankAccount = \App\Models\ViharaBankAccount::find($data['bank_account_id']);
-            if ((int) $bankAccount->vihara_id !== (int) $data['vihara_id']) {
+            if (! $bankAccount->bolehDipakaiVihara((int) $data['vihara_id'])) {
                 return response()->json([
-                    'message' => 'Rekening bank bukan milik vihara transaksi ini.',
-                    'errors' => ['bank_account_id' => ['Rekening bank bukan milik vihara transaksi ini.']],
+                    'message' => 'Rekening ini tidak boleh dipakai vihara transaksi ini.',
+                    'errors' => ['bank_account_id' => ['Rekening ini tidak boleh dipakai vihara transaksi ini.']],
                 ], 422);
             }
             $data['destination_account_code'] = $bankAccount->coa_account_code;
         }
 
-        // Single-entity setup (YDI) — default dari user, fallback entity pertama.
-        if (empty($data['entity_id'])) {
+        // Yayasan MENGIKUTI vihara transaksi, bukan yang dikirim klien.
+        // Tanpa ini, request dengan entity_id yayasan A tapi vihara milik
+        // yayasan B tersimpan apa adanya: barisnya tercatat di yayasan yang
+        // tidak memiliki viharanya, dan kunci periode yang diperiksa pun
+        // yayasan yang keliru. Pembayaran sudah begini sejak awal; penerimaan
+        // tertinggal — ketahuan oleh skenario C-PNR-09.
+        $viharaEntityId = ! empty($data['vihara_id'])
+            ? \App\Models\Vihara::whereKey($data['vihara_id'])->value('entity_id')
+            : null;
+        if ($viharaEntityId !== null) {
+            // Yayasan yang disebut klien tapi BERTENTANGAN dengan viharanya
+            // ditolak, bukan dibetulkan diam-diam: menyimpannya ke yayasan
+            // lain berarti menutupi kekeliruan si pengirim (C-PNR-09).
+            if (! empty($data['entity_id']) && (int) $data['entity_id'] !== (int) $viharaEntityId) {
+                return response()->json([
+                    'message' => 'Vihara yang dipilih bukan milik yayasan yang disebut.',
+                    'errors' => ['vihara_id' => ['Vihara yang dipilih bukan milik yayasan yang disebut.']],
+                ], 422);
+            }
+            $data['entity_id'] = (int) $viharaEntityId;
+        } elseif (empty($data['entity_id'])) {
             $data['entity_id'] = $request->user()->entity_id
                 ?? \App\Models\Entity::query()->value('id');
         }
@@ -386,8 +405,8 @@ class PenerimaanController extends Controller
 
         if (! empty($data['bank_account_id'])) {
             $rek = \App\Models\ViharaBankAccount::find($data['bank_account_id']);
-            if ((int) $rek->vihara_id !== (int) $penerimaan->vihara_id) {
-                return response()->json(['message' => 'Rekening bank bukan milik vihara transaksi ini.'], 422);
+            if (! $rek->bolehDipakaiVihara((int) $penerimaan->vihara_id)) {
+                return response()->json(['message' => 'Rekening ini tidak boleh dipakai vihara transaksi ini.'], 422);
             }
             $data['destination_account_code'] = $rek->coa_account_code;
         }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\PettyCashPic;
+use App\Models\Vihara;
 use App\Models\ViharaBankAccount;
 use App\Services\ViharaScopeService;
 use Illuminate\Http\JsonResponse;
@@ -27,23 +28,43 @@ class KasBankController extends Controller
         $bankAccountId = $request->integer('bank_account_id') ?: null;
 
         return response()->json([
-            'bank_accounts' => $this->bankAccounts($viharaIds),
+            'bank_accounts' => $this->bankAccounts(
+                $viharaIds,
+                $request->user()->canSeeYayasanLevel(),
+            ),
             'kas_kecil' => $this->kasKecil($viharaIds),
             'kas_tunai' => $this->kasTunai($viharaIds),
             'mutasi' => $this->mutasi($viharaIds, $bankAccountId),
         ]);
     }
 
-    /** Saldo per rekening = penerimaan − pembayaran − topup kas kecil (posted) + net settlement KM. */
-    private function bankAccounts(?array $viharaIds): array
+    /**
+     * Saldo per rekening = penerimaan − pembayaran − topup kas kecil (posted)
+     * + net settlement KM.
+     *
+     * Rekening milik yayasan dan dipakai bersama (FV-36), jadi ada DUA angka:
+     *   - `saldo`: saldo utuh rekening, yang harus cocok dengan rekening
+     *     koran. Ditampilkan untuk user tingkat yayasan/global.
+     *   - `porsi`: masuk − keluar milik tiap vihara di rekening itu. User
+     *     berjangkauan vihara hanya berhak atas porsinya sendiri — saldo utuh
+     *     memuat dana vihara lain.
+     * Porsi boleh minus: vihara bisa memakai dana rekening bersama melebihi
+     * yang masuk untuknya. Itu ditandai, bukan disembunyikan.
+     */
+    private function bankAccounts(?array $viharaIds, bool $tingkatYayasan): array
     {
         $accounts = ViharaBankAccount::query()
-            ->with('vihara:id,name')
+            ->with(['entity:id,legal_name', 'viharas:id,name'])
             ->where('active', true)
-            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))
+            ->when($viharaIds !== null, fn ($q) => $q->where(
+                fn ($w) => $w->whereDoesntHave('viharas')
+                    ->orWhereHas('viharas', fn ($p) => $p->whereIn('viharas.id', $viharaIds)),
+            ))
             ->orderBy('bank_name')
             ->orderBy('id')
             ->get();
+
+        $porsi = $this->porsiPerVihara();
 
         $in = DB::table('penerimaan')->where('status', 'posted')->whereNotNull('bank_account_id')
             ->groupBy('bank_account_id')->selectRaw('bank_account_id, SUM(amount) AS s')
@@ -60,20 +81,80 @@ class KasBankController extends Controller
             ->groupBy('bank_account_id')->selectRaw('bank_account_id, SUM(net) AS s')
             ->pluck('s', 'bank_account_id');
 
-        return $accounts->map(function (ViharaBankAccount $a) use ($in, $out, $topup, $settleIn) {
+        return $accounts->map(function (ViharaBankAccount $a) use ($in, $out, $topup, $settleIn, $porsi, $viharaIds, $tingkatYayasan) {
             $saldo = (float) ($in[$a->id] ?? 0) - (float) ($out[$a->id] ?? 0) - (float) ($topup[$a->id] ?? 0)
                 + (float) ($settleIn[$a->id] ?? 0);
 
+            $rincian = collect($porsi[$a->id] ?? [])
+                ->when($viharaIds !== null, fn ($c) => $c->filter(
+                    fn ($r, $viharaId) => in_array((int) $viharaId, $viharaIds, true),
+                ))
+                ->map(fn ($nilai, $viharaId) => [
+                    'vihara_id' => (int) $viharaId,
+                    'vihara_name' => $nilai['nama'],
+                    'porsi' => number_format($nilai['porsi'], 2, '.', ''),
+                ])
+                ->values()
+                ->all();
+
+            $porsiSaya = array_sum(array_map(fn ($r) => (float) $r['porsi'], $rincian));
+
             return [
                 'id' => $a->id,
-                'vihara_id' => $a->vihara_id,
-                'vihara_name' => $a->vihara?->name,
+                'entity_id' => $a->entity_id,
+                'entity_name' => $a->entity?->legal_name,
+                // Kosong = dipakai seluruh vihara di yayasan itu.
+                'vihara_names' => $a->viharas->pluck('name')->all(),
                 'bank_name' => $a->bank_name,
                 'account_number' => $a->account_number,
                 'account_name' => $a->account_name,
-                'saldo' => number_format($saldo, 2, '.', ''),
+                // Saldo utuh hanya untuk yang berhak melihat seluruh isinya.
+                'saldo' => $tingkatYayasan ? number_format($saldo, 2, '.', '') : null,
+                'saldo_penuh_tersedia' => $tingkatYayasan,
+                'porsi' => number_format($porsiSaya, 2, '.', ''),
+                'porsi_per_vihara' => $tingkatYayasan ? $rincian : [],
             ];
         })->values()->all();
+    }
+
+    /**
+     * Masuk − keluar per (rekening, vihara). Dipakai menghitung porsi tiap
+     * vihara pada rekening bersama.
+     *
+     * @return array<int, array<int, array{nama: string, porsi: float}>>
+     */
+    private function porsiPerVihara(): array
+    {
+        $baris = DB::query()->fromSub(
+            DB::table('penerimaan')->where('status', 'posted')->whereNotNull('bank_account_id')
+                ->selectRaw('bank_account_id, vihara_id, amount AS nilai')
+                ->unionAll(
+                    DB::table('pembayaran')->where('status', 'posted')->whereNotNull('bank_account_id')
+                        ->selectRaw('bank_account_id, vihara_id, -amount AS nilai'),
+                )
+                ->unionAll(
+                    DB::table('petty_cash_movements')->where('status', 'posted')
+                        ->where('subtype', 'topup')->whereNotNull('source_bank_account_id')
+                        ->selectRaw('source_bank_account_id AS bank_account_id, vihara_id, -amount AS nilai'),
+                ),
+            'm',
+        )
+            ->selectRaw('bank_account_id, vihara_id, SUM(nilai) AS porsi')
+            ->whereNotNull('vihara_id')
+            ->groupBy('bank_account_id', 'vihara_id')
+            ->get();
+
+        $nama = Vihara::query()->pluck('name', 'id');
+
+        $out = [];
+        foreach ($baris as $r) {
+            $out[(int) $r->bank_account_id][(int) $r->vihara_id] = [
+                'nama' => $nama[$r->vihara_id] ?? '—',
+                'porsi' => (float) $r->porsi,
+            ];
+        }
+
+        return $out;
     }
 
     /** Saldo kas kecil per PIC (posted topup − posted usage). */

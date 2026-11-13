@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Pembayaran;
 use App\Models\Penerimaan;
 use App\Models\PettyCashMovement;
+use App\Models\Entity;
 use App\Models\Vihara;
 use App\Models\ViharaBankAccount;
 use App\Services\ViharaScopeService;
@@ -27,6 +28,7 @@ class ViharaBankAccountController extends Controller
     public function index(Request $request): JsonResponse
     {
         $q = ViharaBankAccount::query()
+            ->with('entity:id,code,legal_name')
             ->where('active', true)
             ->orderBy('bank_name')
             ->orderBy('id');
@@ -35,13 +37,25 @@ class ViharaBankAccountController extends Controller
             $q->where('type', $type);
         }
 
-        ViharaScopeService::applyScope($q, $request);
+        // Rekening milik yayasan (FV-36): form menyebut VIHARA transaksinya,
+        // dan yang ditawarkan adalah rekening yayasan vihara itu yang memang
+        // boleh dipakai olehnya.
+        if ($request->filled('vihara_id')) {
+            $viharaId = $request->integer('vihara_id');
+            ViharaScopeService::guardRecord($request, $viharaId);
+            $q->usableByVihara($viharaId);
+        } else {
+            $this->batasiYayasan($q, $request);
+        }
 
         return response()->json([
             'data' => $q->get([
-                'id', 'vihara_id', 'type', 'bank_name', 'account_number',
+                'id', 'entity_id', 'type', 'bank_name', 'account_number',
                 'account_name', 'coa_account_code', 'description', 'active',
-            ]),
+            ])->map(fn (ViharaBankAccount $b) => $b->only([
+                'id', 'entity_id', 'type', 'bank_name', 'account_number',
+                'account_name', 'coa_account_code', 'description', 'active',
+            ]) + ['entity_name' => $b->entity?->legal_name]),
         ]);
     }
 
@@ -52,8 +66,8 @@ class ViharaBankAccountController extends Controller
     public function manage(Request $request): JsonResponse
     {
         $q = ViharaBankAccount::query()
-            ->with(['vihara:id,name,code', 'coaAccount:code,name'])
-            ->orderBy('vihara_id')
+            ->with(['entity:id,code,legal_name', 'viharas:id,name,code', 'coaAccount:code,name'])
+            ->orderBy('entity_id')
             ->orderBy('bank_name')
             ->orderBy('id');
 
@@ -73,15 +87,24 @@ class ViharaBankAccountController extends Controller
             });
         }
 
-        ViharaScopeService::applyScope($q, $request);
+        if ($request->filled('vihara_id')) {
+            $viharaId = $request->integer('vihara_id');
+            ViharaScopeService::guardRecord($request, $viharaId);
+            $q->usableByVihara($viharaId);
+        } else {
+            $this->batasiYayasan($q, $request);
+        }
 
         $perPage = min(max((int) $request->integer('per_page', 20), 1), 100);
         $halaman = $q->paginate($perPage);
 
         $halaman->getCollection()->transform(fn (ViharaBankAccount $b) => [
             'id' => $b->id,
-            'vihara_id' => $b->vihara_id,
-            'vihara_name' => $b->vihara?->name,
+            'entity_id' => $b->entity_id,
+            'entity_name' => $b->entity?->legal_name,
+            // Kosong = seluruh vihara di yayasan itu (FV-36).
+            'vihara_ids' => $b->viharas->pluck('id')->all(),
+            'vihara_names' => $b->viharas->pluck('name')->all(),
             'type' => $b->type,
             'type_label' => ViharaBankAccount::TYPES[$b->type] ?? $b->type,
             'bank_name' => $b->bank_name,
@@ -100,32 +123,41 @@ class ViharaBankAccountController extends Controller
         return response()->json($halaman);
     }
 
-    public function store(Request $request, Vihara $vihara): JsonResponse
+    public function store(Request $request, Entity $entity): JsonResponse
     {
-        ViharaScopeService::guardRecord($request, $vihara->id);
+        ViharaScopeService::guardEntity($request, $entity->id);
 
         $data = $this->validasi($request, null);
+        $pengguna = $this->viharaPengguna($request, $entity);
 
-        $account = $vihara->bankAccounts()->create($data + [
+        $account = $entity->bankAccounts()->create($data + [
             'type' => $data['type'] ?? ViharaBankAccount::TYPE_BANK,
             'coa_account_code' => $data['coa_account_code'] ?? '1130',
         ]);
+        $account->viharas()->sync($pengguna);
 
-        return response()->json($account, 201);
+        return response()->json($account->fresh()->load('viharas:id,name'), 201);
     }
 
     public function update(Request $request, ViharaBankAccount $viharaBankAccount): JsonResponse
     {
-        ViharaScopeService::guardRecord($request, $viharaBankAccount->vihara_id);
+        ViharaScopeService::guardEntity($request, $viharaBankAccount->entity_id);
 
         $viharaBankAccount->update($this->validasi($request, $viharaBankAccount));
 
-        return response()->json($viharaBankAccount->fresh());
+        // vihara_ids dikirim = daftar pengguna diganti; [] berarti semua vihara.
+        if ($request->has('vihara_ids')) {
+            $viharaBankAccount->viharas()->sync(
+                $this->viharaPengguna($request, $viharaBankAccount->entity),
+            );
+        }
+
+        return response()->json($viharaBankAccount->fresh()->load('viharas:id,name'));
     }
 
     public function destroy(Request $request, ViharaBankAccount $viharaBankAccount): JsonResponse
     {
-        ViharaScopeService::guardRecord($request, $viharaBankAccount->vihara_id);
+        ViharaScopeService::guardEntity($request, $viharaBankAccount->entity_id);
 
         if ($this->dipakaiTransaksi($viharaBankAccount)) {
             return response()->json([
@@ -184,6 +216,43 @@ class ViharaBankAccountController extends Controller
         }
 
         return $data;
+    }
+
+    /**
+     * Vihara pengguna yang dikirim klien, dipastikan milik yayasan rekening
+     * itu. Kosong / tidak dikirim = seluruh vihara yayasan (FV-36 poin 2).
+     */
+    private function viharaPengguna(Request $request, Entity $entity): array
+    {
+        $request->validate([
+            'vihara_ids' => ['sometimes', 'nullable', 'array'],
+            'vihara_ids.*' => ['integer', 'exists:viharas,id'],
+        ]);
+
+        $ids = array_map('intval', $request->input('vihara_ids') ?? []);
+        if ($ids === []) {
+            return [];
+        }
+
+        $milikYayasan = $entity->viharas()->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $asing = array_diff($ids, $milikYayasan);
+        if ($asing !== []) {
+            throw ValidationException::withMessages([
+                'vihara_ids' => 'Ada vihara yang bukan milik yayasan pemilik rekening ini.',
+            ]);
+        }
+
+        return $ids;
+    }
+
+    /** Daftar rekening dibatasi yayasan user; global melihat semuanya. */
+    private function batasiYayasan($q, Request $request): void
+    {
+        $user = $request->user();
+        if ($user->isGlobalScope()) {
+            return;
+        }
+        $q->where('entity_id', $user->entity_id);
     }
 
     private function dipakaiTransaksi(ViharaBankAccount $b): bool

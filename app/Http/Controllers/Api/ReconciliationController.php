@@ -41,7 +41,15 @@ class ReconciliationController extends Controller
                 'bankLines as statement_count',
                 'bankLines as matched_count' => fn ($q) => $q->whereNotNull('matched_type'),
             ])
-            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))
+            // Rekonsiliasi baru tingkat yayasan (vihara_id NULL, FV-36);
+            // yang lama masih menunjuk viharanya masing-masing.
+            ->when($viharaIds !== null, fn ($q) => $q->where(
+                fn ($w) => $w->whereIn('vihara_id', $viharaIds)
+                    ->when(
+                        $request->user()->canSeeYayasanLevel(),
+                        fn ($y) => $y->orWhereNull('vihara_id'),
+                    ),
+            ))
             ->orderByDesc('period_month')
             ->orderByDesc('id')
             ->get()
@@ -69,9 +77,14 @@ class ReconciliationController extends Controller
     /** Saldo buku per rekening (rumus sama dengan /api/kas-bank) + run terakhir. */
     private function bankSummaries(?array $viharaIds): array
     {
+        // Rekening milik yayasan: yang relevan adalah rekening yang boleh
+        // dipakai salah satu vihara dalam jangkauan user (FV-36).
         $accounts = ViharaBankAccount::query()
             ->where('active', true)
-            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))
+            ->when($viharaIds !== null, fn ($q) => $q->where(
+                fn ($w) => $w->whereDoesntHave('viharas')
+                    ->orWhereHas('viharas', fn ($p) => $p->whereIn('viharas.id', $viharaIds)),
+            ))
             ->orderBy('bank_name')
             ->orderBy('id')
             ->get();
@@ -119,7 +132,11 @@ class ReconciliationController extends Controller
         ]);
 
         $bank = ViharaBankAccount::findOrFail($data['bank_account_id']);
-        ViharaScopeService::guardRecord($request, $bank->vihara_id);
+        // Rekening milik yayasan (FV-36): yang dijaga yayasannya, dan
+        // rekonsiliasinya tingkat yayasan — rekening korannya memuat mutasi
+        // seluruh vihara pemakai rekening itu.
+        ViharaScopeService::guardEntity($request, $bank->entity_id);
+        ViharaScopeService::guardYayasanLevel($request);
 
         $existing = ReconciliationRun::query()
             ->where('bank_account_id', $bank->id)
@@ -136,7 +153,7 @@ class ReconciliationController extends Controller
 
         $run = ReconciliationRun::create([
             'code' => $this->nextCode($data['period_month']),
-            'vihara_id' => $bank->vihara_id,
+            'vihara_id' => null,
             'bank_account_id' => $bank->id,
             'account_code' => $bank->coa_account_code,
             'period_month' => $data['period_month'],

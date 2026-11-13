@@ -50,7 +50,7 @@ class PembayaranController extends Controller
             $q->where('entity_id', $entityId);
         }
 
-        return response()->json($q->paginate(25));
+        return response()->json($q->paginate(min(max((int) $request->integer('per_page', 20), 1), 200)));
     }
 
     public function show(Request $request, Pembayaran $pembayaran): JsonResponse
@@ -148,10 +148,13 @@ class PembayaranController extends Controller
         // mengikuti coa_account_code rekening.
         if (! empty($data['bank_account_id'])) {
             $bankAccount = \App\Models\ViharaBankAccount::find($data['bank_account_id']);
-            if ((int) $bankAccount->vihara_id !== (int) $data['vihara_id']) {
+            // Rekening milik yayasan dan dipakai bersama (FV-36): yang
+            // diperiksa bukan "milik vihara ini", melainkan "boleh dipakai
+            // vihara ini".
+            if (! $bankAccount->bolehDipakaiVihara((int) $data['vihara_id'])) {
                 return response()->json([
-                    'message' => 'Rekening bank bukan milik vihara transaksi ini.',
-                    'errors' => ['bank_account_id' => ['Rekening bank bukan milik vihara transaksi ini.']],
+                    'message' => 'Rekening ini tidak boleh dipakai vihara transaksi ini.',
+                    'errors' => ['bank_account_id' => ['Rekening ini tidak boleh dipakai vihara transaksi ini.']],
                 ], 422);
             }
             $data['source_account_code'] = $bankAccount->coa_account_code;
@@ -165,6 +168,14 @@ class PembayaranController extends Controller
         // sengaja diabaikan bila bertentangan.
         $viharaEntityId = \App\Models\Vihara::whereKey($data['vihara_id'])->value('entity_id');
         if ($viharaEntityId !== null) {
+            // Yayasan yang bertentangan dengan viharanya ditolak, bukan
+            // ditimpa diam-diam (C-PNR-09).
+            if (! empty($data['entity_id']) && (int) $data['entity_id'] !== (int) $viharaEntityId) {
+                return response()->json([
+                    'message' => 'Vihara yang dipilih bukan milik yayasan yang disebut.',
+                    'errors' => ['vihara_id' => ['Vihara yang dipilih bukan milik yayasan yang disebut.']],
+                ], 422);
+            }
             $data['entity_id'] = (int) $viharaEntityId;
         } elseif (empty($data['entity_id'])) {
             // Vihara lama yang belum terhubung ke yayasan mana pun.
@@ -347,9 +358,9 @@ class PembayaranController extends Controller
 
         if (array_key_exists('bank_account_id', $data) && ! empty($data['bank_account_id'])) {
             $rek = \App\Models\ViharaBankAccount::find($data['bank_account_id']);
-            if ((int) $rek->vihara_id !== (int) $pembayaran->vihara_id) {
+            if (! $rek->bolehDipakaiVihara((int) $pembayaran->vihara_id)) {
                 return response()->json([
-                    'message' => 'Rekening bank bukan milik vihara transaksi ini.',
+                    'message' => 'Rekening ini tidak boleh dipakai vihara transaksi ini.',
                 ], 422);
             }
             $data['source_account_code'] = $rek->coa_account_code;

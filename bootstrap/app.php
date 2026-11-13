@@ -16,8 +16,18 @@ return Application::configure(basePath: dirname(__DIR__))
         // Alias Spatie: 'permission' menerima beberapa izin dengan arti ATAU
         // ("a|b"), yang tidak bisa dilakukan middleware 'can' bawaan Laravel.
         // Dipakai antrean persetujuan — lihat routes/api.php.
+        // Aplikasi ini API-only: tidak ada route bernama 'login'. Tanpa ini,
+        // permintaan TANPA header Accept: application/json yang gagal auth
+        // membalas 500 "Route [login] not defined" — bukan 401. Terlihat saat
+        // menguji akun nonaktif dengan curl polos, dan sebelumnya dari
+        // <img src=> yang tidak membawa Bearer token.
+        $middleware->redirectGuestsTo(fn (Request $request) => null);
+
         $middleware->alias([
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+            // Akun nonaktif ditolak di permintaan berikutnya, bukan hanya saat
+            // login (C-ADM-05).
+            'user.aktif' => \App\Http\Middleware\TolakUserNonaktif::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

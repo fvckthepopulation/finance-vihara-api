@@ -32,7 +32,7 @@ class ViharaController extends Controller
             });
         }
 
-        return response()->json($q->paginate(50));
+        return response()->json($q->paginate(min(max((int) $request->integer('per_page', 50), 1), 200)));
     }
 
     public function show(Request $request, Vihara $vihara): JsonResponse
@@ -125,6 +125,14 @@ class ViharaController extends Controller
     public function destroy(Request $request, Vihara $vihara): JsonResponse
     {
         ViharaScopeService::guardRecord($request, (int) $vihara->id);
+
+        // Unit Umum/Pusat dibuat otomatis per yayasan dan tidak boleh dihapus
+        // (P-01): transaksi tingkat yayasan bergantung padanya.
+        if ($vihara->is_umum) {
+            return response()->json([
+                'message' => 'Unit Umum/Pusat Yayasan dibuat otomatis dan tidak bisa dihapus.',
+            ], 422);
+        }
 
         if ($vihara->users()->exists()) {
             return response()->json(['message' => 'Tidak bisa hapus — masih ada user terhubung. Nonaktifkan saja.'], 422);

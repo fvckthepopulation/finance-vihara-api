@@ -74,7 +74,11 @@ class EntityController extends Controller
             'active' => ['sometimes', 'boolean'],
         ]);
 
-        return response()->json(Entity::create($data)->loadCount('viharas'), 201);
+        $entity = Entity::create($data);
+        // Tiap yayasan selalu punya unit Umum/Pusat sejak lahir (P-01).
+        $entity->pastikanUnitUmum();
+
+        return response()->json($entity->loadCount('viharas'), 201);
     }
 
     public function update(Request $request, Entity $entity): JsonResponse
@@ -99,9 +103,20 @@ class EntityController extends Controller
         if (! $request->user()->isGlobalScope()) {
             abort(403, 'Hanya admin tingkat global yang boleh menghapus yayasan.');
         }
-        if ($entity->viharas()->exists()) {
+        // Unit Umum/Pusat dibuat otomatis bersama yayasannya (P-01), jadi ia
+        // tidak boleh menjadi alasan yayasan itu tidak bisa dihapus. Yang
+        // menahan hanyalah vihara sungguhan — atau unit Umum yang sudah
+        // terlanjur dipakai transaksi.
+        if ($entity->viharas()->where('is_umum', false)->exists()) {
             return response()->json([
                 'message' => 'Tidak bisa hapus — yayasan masih menaungi vihara. Nonaktifkan saja.',
+            ], 422);
+        }
+
+        $umum = $entity->unitUmum();
+        if ($umum !== null && $this->unitUmumDipakai($umum->id)) {
+            return response()->json([
+                'message' => 'Tidak bisa hapus — unit Umum/Pusat yayasan ini sudah dipakai transaksi.',
             ], 422);
         }
         if ($entity->users()->exists()) {
@@ -110,9 +125,22 @@ class EntityController extends Controller
             ], 422);
         }
 
+        $umum?->forceDeleteUnitUmum();
         $entity->delete();
 
         return response()->json(['message' => 'deleted']);
+    }
+
+    /** Unit Umum sudah menyimpan transaksi? */
+    private function unitUmumDipakai(int $viharaId): bool
+    {
+        foreach (['pembayaran', 'penerimaan', 'petty_cash_movements', 'journal_entries'] as $tabel) {
+            if (\Illuminate\Support\Facades\DB::table($tabel)->where('vihara_id', $viharaId)->exists()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function guard(Request $request, Entity $entity): void

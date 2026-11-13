@@ -6,9 +6,10 @@ use App\Models\Concerns\SerializesDatesInAppTimezone;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 #[Fillable([
-    'vihara_id', 'type', 'bank_name', 'account_number', 'account_name',
+    'entity_id', 'type', 'bank_name', 'account_number', 'account_name',
     'coa_account_code', 'description', 'active',
 ])]
 class ViharaBankAccount extends Model
@@ -44,9 +45,44 @@ class ViharaBankAccount extends Model
         return trim("{$short} {$this->account_number}");
     }
 
-    public function vihara(): BelongsTo
+    public function entity(): BelongsTo
     {
-        return $this->belongsTo(Vihara::class);
+        return $this->belongsTo(Entity::class);
+    }
+
+    /**
+     * Vihara pengguna rekening ini (FV-36). KOSONG = seluruh vihara di
+     * yayasannya boleh memakai — itu keadaan bawaan rekening yayasan.
+     */
+    public function viharas(): BelongsToMany
+    {
+        return $this->belongsToMany(Vihara::class, 'bank_account_vihara', 'bank_account_id', 'vihara_id');
+    }
+
+    /** Rekening ini boleh dipakai vihara tersebut? */
+    public function bolehDipakaiVihara(?int $viharaId): bool
+    {
+        if ($viharaId === null) {
+            return true;
+        }
+        $pengguna = $this->viharas()->pluck('viharas.id')->all();
+
+        return $pengguna === [] || in_array($viharaId, $pengguna, true);
+    }
+
+    /**
+     * Rekening yang boleh dipakai satu vihara: milik yayasan vihara itu, dan
+     * pivot-nya kosong (semua vihara) atau memuat vihara tersebut.
+     */
+    public function scopeUsableByVihara($query, int $viharaId)
+    {
+        return $query->where(function ($q) use ($viharaId) {
+            $q->whereDoesntHave('viharas')
+                ->orWhereHas('viharas', fn ($w) => $w->where('viharas.id', $viharaId));
+        })->whereHas('entity', fn ($q) => $q->whereHas(
+            'viharas',
+            fn ($w) => $w->where('viharas.id', $viharaId),
+        ));
     }
 
     public function coaAccount(): BelongsTo

@@ -40,7 +40,7 @@ class AdminController extends Controller
             });
         }
 
-        $kolom = ['id', 'name', 'email', 'entity_id', 'scope_type', 'created_at'];
+        $kolom = ['id', 'name', 'email', 'entity_id', 'scope_type', 'active', 'created_at'];
 
         // paginate=1 dipakai halaman Admin -> Users. Bentuk lama (array
         // penuh) dipertahankan supaya pemanggil lain tidak ikut berubah.
@@ -69,6 +69,7 @@ class AdminController extends Controller
             'role' => ['required', 'string', 'exists:roles,name'],
             'entity_id' => ['nullable', 'integer', 'exists:entities,id'],
             'scope_type' => ['required', 'string', 'in:' . implode(',', User::SCOPE_TYPES)],
+            'active' => ['sometimes', 'boolean'],
             'vihara_ids' => ['sometimes', 'array'],
             'vihara_ids.*' => ['integer', 'exists:viharas,id'],
             // Kompat klien lama: satu vihara.
@@ -83,6 +84,7 @@ class AdminController extends Controller
             'password' => Hash::make($data['password']),
             'entity_id' => $scope['entity_id'],
             'scope_type' => $scope['scope_type'],
+            'active' => $data['active'] ?? true,
             'email_verified_at' => now(),
         ]);
         $user->syncRoles([$data['role']]);
@@ -105,6 +107,7 @@ class AdminController extends Controller
             'role' => ['sometimes', 'string', 'exists:roles,name'],
             'entity_id' => ['sometimes', 'nullable', 'integer', 'exists:entities,id'],
             'scope_type' => ['sometimes', 'string', 'in:' . implode(',', User::SCOPE_TYPES)],
+            'active' => ['sometimes', 'boolean'],
             'vihara_ids' => ['sometimes', 'array'],
             'vihara_ids.*' => ['integer', 'exists:viharas,id'],
             'vihara_id' => ['sometimes', 'nullable', 'integer', 'exists:viharas,id'],
@@ -118,6 +121,14 @@ class AdminController extends Controller
         }
         if (isset($data['email'])) {
             $user->email = $data['email'];
+        }
+        if (array_key_exists('active', $data)) {
+            $user->active = (bool) $data['active'];
+            // Dinonaktifkan = sesi yang sedang berjalan ikut diputus, bukan
+            // menunggu tokennya kedaluwarsa sendiri (C-ADM-05).
+            if (! $user->active) {
+                $user->tokens()->delete();
+            }
         }
 
         $touchesScope = array_key_exists('scope_type', $data)
@@ -187,6 +198,7 @@ class AdminController extends Controller
             'entity_id' => $user->entity_id,
             'entity' => $user->entity,
             'scope_type' => $user->scope_type,
+            'active' => (bool) $user->active,
             'viharas' => $user->viharas->map(fn ($v) => [
                 'id' => $v->id, 'code' => $v->code, 'name' => $v->name,
             ])->values(),

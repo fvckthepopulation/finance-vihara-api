@@ -13,8 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'contact_pic', 'contact_phone', 'contact_email',
     'bank_name', 'bank_account_number', 'bank_account_holder',
     'npwp', 'active',
-    'verified_at', 'verified_by_user_id',
-])]
+    'verified_at', 'verified_by_user_id', 'is_umum',])]
 class Vihara extends Model
 {
     use SerializesDatesInAppTimezone;
@@ -23,6 +22,7 @@ class Vihara extends Model
     {
         return [
             'active' => 'boolean',
+            'is_umum' => 'boolean',
             'verified_at' => 'datetime',
         ];
     }
@@ -49,9 +49,24 @@ class Vihara extends Model
     }
 
     /** Rekening bank milik vihara (master, dipakai transaksi & kas-bank). */
-    public function bankAccounts(): \Illuminate\Database\Eloquent\Relations\HasMany
+    /**
+     * Hapus unit Umum — hanya dipakai saat yayasannya sendiri dihapus.
+     * Jalur biasa (ViharaController::destroy) memang menolaknya (P-01).
+     */
+    public function forceDeleteUnitUmum(): void
     {
-        return $this->hasMany(ViharaBankAccount::class);
+        if ($this->is_umum) {
+            $this->delete();
+        }
+    }
+
+    /**
+     * Rekening yang boleh dipakai vihara ini (FV-36). Rekening milik yayasan;
+     * pivot kosong berarti seluruh vihara yayasan itu boleh memakainya.
+     */
+    public function usableBankAccounts()
+    {
+        return ViharaBankAccount::query()->usableByVihara($this->id);
     }
 
     /** PIC pemegang kas kecil vihara. */

@@ -178,27 +178,35 @@ class RbacSeeder extends Seeder
             'permissions' => '*',
         ],
         'admin_yayasan' => [
-            'description' => 'Admin satu yayasan — seluruh vihara di yayasannya, termasuk kelola pengguna. Tidak bisa menyentuh yayasan lain atau mengubah definisi role.',
+            'description' => 'Admin satu yayasan — mengelola transaksi, laporan, dan anggaran yayasannya sendiri. Tidak menyentuh bagan akun, yayasan, pengguna, maupun definisi role.',
             'default_scope' => User::SCOPE_ENTITY,
-            // Semua kecuali roles.manage (definisi role bersifat lintas
-            // tenant, jadi tetap hak superadmin).
+            // Disempitkan ke 26 key sheet Permission penguji (ENV-C v2).
+            // Sebelumnya role ini praktis setara admin tertinggi: ia memegang
+            // coa.manage, entities.manage, users.manage, masters.manage, dan
+            // period.close/reopen. Sheet menempatkan semua itu di Super Admin /
+            // Admin Teratas, dan Matriks Menu menulis Chart of Accounts, Users,
+            // Entities, Vihara "Tidak tampil" untuk Admin Yayasan.
+            //
+            // Satu tambahan di luar 26 key: transaksi.view. Sheet Permission
+            // memang tidak punya key untuk menu Semua Transaksi (di Mapping
+            // v1→v2 menu itu dipetakan ke pembayaran.view + penerimaan.view),
+            // tapi Matriks Menu menulis Semua Transaksi = "Penuh" untuk Admin
+            // Yayasan. Di sistem ini menunya punya key sendiri (FV-28), jadi
+            // key itu yang diberikan. konsolidasi.view TIDAK diberikan —
+            // Matriks Menu menulisnya "Tidak tampil" untuk role ini.
             'permissions' => [
-                'cash.view', 'cash.account.manage',
+                'cash.view',
                 'reconcile.view', 'reconcile.import', 'reconcile.match', 'reconcile.finalize',
                 'petty_cash.view', 'petty_cash.declare', 'petty_cash.approve', 'petty_cash.replenish',
                 'pembayaran.view', 'pembayaran.create', 'pembayaran.approve',
-                'penerimaan.view',
-                'transaksi.view', 'penerimaan.create', 'penerimaan.approve',
+                'penerimaan.view', 'penerimaan.create', 'penerimaan.approve',
                 'reports.pl.view', 'reports.balance_sheet.view', 'reports.export',
-                'konsolidasi.view',
                 'anggaran.view', 'anggaran.manage',
                 'tax.view', 'tax.compliance.manage',
-                'journal.view', 'journal.create', 'journal.approve',
-                'period.view', 'period.close', 'period.reopen',
-                'entities.view', 'entities.manage',
-                'users.manage',
-                'coa.view', 'coa.manage',
-                'masters.view', 'masters.manage',
+                'journal.view', 'journal.create',
+                'period.view',
+                'coa.view',
+                'transaksi.view',
             ],
         ],
         'pengawas_yayasan' => [
@@ -256,6 +264,73 @@ class RbacSeeder extends Seeder
                 'period.view', 'period.close',
                 'entities.view',
                 'coa.view', 'masters.view',
+            ],
+        ],
+        // ── Lima role dari matriks penguji (Test scenario Finance Vihara v2.1 +
+        // User_Role_Permission_ENV-C v2). Daftar izinnya diturunkan langsung
+        // dari kolom ✓/✗ sheet Permission; jumlahnya dicocokkan dengan baris
+        // "Jumlah key ✓" di sheet itu (33 / 16 / 26 / 13).
+        //
+        // Role lama (bendahara, approver, viewer, pengawas_yayasan) sengaja
+        // DIBIARKAN: akun produksi masih memakainya, dan menghapusnya akan
+        // mencabut akses orang yang sedang bekerja.
+        'admin_teratas' => [
+            'description' => 'Satu tingkat di bawah superadmin: seluruh yayasan dan vihara, tapi tidak mengubah definisi role, yayasan, maupun bagan akun.',
+            'default_scope' => User::SCOPE_GLOBAL,
+            'permissions' => [
+                'cash.view', 'cash.account.manage',
+                'reconcile.view', 'reconcile.import', 'reconcile.match', 'reconcile.finalize',
+                'petty_cash.view', 'petty_cash.declare', 'petty_cash.approve', 'petty_cash.replenish',
+                'pembayaran.view', 'pembayaran.create', 'pembayaran.approve',
+                'penerimaan.view', 'penerimaan.create', 'penerimaan.approve',
+                'reports.pl.view', 'reports.balance_sheet.view', 'reports.export',
+                'anggaran.view', 'anggaran.manage',
+                'tax.view', 'tax.compliance.manage',
+                'journal.view', 'journal.create', 'journal.approve',
+                'period.view', 'period.close',
+                'entities.view',
+                'users.manage',
+                'coa.view',
+                'masters.view', 'masters.manage',
+                // Di luar 37 key sheet: menu Semua Transaksi & Konsolidasi
+                // punya izinnya sendiri di sistem ini (FV-28, FV-32), dan
+                // pembatalan transaksi memang ada key-nya — itu yang dicari
+                // temuan T-01, dan menurut usulan P-15 hanya untuk dua role
+                // teratas.
+                'transaksi.view', 'konsolidasi.view',
+                'pembayaran.void', 'penerimaan.void', 'journal.void', 'petty_cash.void',
+            ],
+        ],
+        'admin_konsolidasi' => [
+            'description' => 'Melihat seluruh yayasan dan melakukan rekonsiliasi, tanpa boleh mencatat atau mengubah transaksi.',
+            'default_scope' => User::SCOPE_GLOBAL,
+            'permissions' => [
+                'cash.view',
+                'reconcile.view', 'reconcile.import', 'reconcile.match', 'reconcile.finalize',
+                'petty_cash.view',
+                'pembayaran.view',
+                'penerimaan.view',
+                'reports.pl.view', 'reports.balance_sheet.view', 'reports.export',
+                'anggaran.view',
+                'tax.view',
+                'journal.view',
+                'period.view',
+                'coa.view',
+                'transaksi.view', 'konsolidasi.view',
+            ],
+        ],
+        'admin_vihara' => [
+            'description' => 'Mencatat transaksi viharanya sendiri. Tidak melihat vihara lain maupun unit Umum yayasan.',
+            'default_scope' => User::SCOPE_VIHARA,
+            'permissions' => [
+                'cash.view',
+                'petty_cash.view', 'petty_cash.declare', 'petty_cash.replenish',
+                'pembayaran.view', 'pembayaran.create',
+                'penerimaan.view', 'penerimaan.create',
+                'reports.pl.view', 'reports.balance_sheet.view', 'reports.export',
+                'anggaran.view',
+                'coa.view',
+                'transaksi.view',
             ],
         ],
         'viewer' => [
@@ -323,6 +398,19 @@ class RbacSeeder extends Seeder
             // Beberapa vihara sekaligus (VVG + VAD, tanpa VBM).
             ['email' => 'bendahara.multi@ydi.test', 'name' => 'Bendahara VVG+VAD', 'role' => 'bendahara',
                 'scope' => User::SCOPE_VIHARA, 'viharas' => [$vvg, $vad]],
+
+            // Lima role matriks penguji — satu akun per role baru, supaya
+            // skenario ENV-C bisa dijalankan apa adanya.
+            ['email' => 'admin.teratas@ydi.test', 'name' => 'Admin Teratas', 'role' => 'admin_teratas',
+                'scope' => User::SCOPE_GLOBAL, 'viharas' => []],
+            ['email' => 'admin.konsolidasi@ydi.test', 'name' => 'Admin Konsolidasi', 'role' => 'admin_konsolidasi',
+                'scope' => User::SCOPE_GLOBAL, 'viharas' => []],
+            ['email' => 'admin.vihara@vvg.test', 'name' => 'Admin Vihara VVG', 'role' => 'admin_vihara',
+                'scope' => User::SCOPE_VIHARA, 'viharas' => [$vvg]],
+            // Akun uji nonaktif (C-ADM-05). Dibuat nonaktif sejak awal;
+            // seeder tidak pernah mengubah status akun yang sudah ada.
+            ['email' => 'uji.nonaktif@vvg.test', 'name' => 'Uji Nonaktif', 'role' => 'admin_vihara',
+                'scope' => User::SCOPE_VIHARA, 'viharas' => [$vvg], 'active' => false],
         ];
 
         foreach ($demo as $u) {
@@ -343,6 +431,12 @@ class RbacSeeder extends Seeder
                 $user->password = Hash::make('password');
                 $user->email_verified_at = now();
             }
+        // Status aktif hanya diset saat akun dibuat — menjalankan seeder
+        // di instance hidup tidak boleh menghidupkan kembali akun yang
+        // sengaja dinonaktifkan admin.
+        if (! $user->exists) {
+            $user->active = $u['active'] ?? true;
+        }
 
             $user->name = $u['name'];
             $user->entity_id = $entityId;

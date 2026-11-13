@@ -165,6 +165,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/pembayaran/{pembayaran}', [PembayaranController::class, 'destroy']);
     // Pembatalan transaksi terposting — jurnal pembalik, bukan penghapusan.
     Route::post('/pembayaran/{pembayaran}/void', [PembayaranController::class, 'void'])->middleware('can:pembayaran.void');
+    // Siklus draft -> diajukan -> disetujui/ditolak.
+    // Mengubah dan mengajukan adalah pekerjaan PENCATAT; menyetujui dan
+    // menolak pekerjaan PENYETUJU. Pemisahan itu yang membuat tombolnya
+    // berbeda per pengguna, dan servernya menolak walau tombolnya dilewati.
+    Route::patch('/pembayaran/{pembayaran}', [PembayaranController::class, 'update'])->middleware('can:pembayaran.create');
+    Route::post('/pembayaran/{pembayaran}/submit', [PembayaranController::class, 'submit'])->middleware('can:pembayaran.create');
+    Route::post('/pembayaran/{pembayaran}/reject', [PembayaranController::class, 'reject'])->middleware('can:pembayaran.approve');
 
     // Penerimaan operasional
     Route::get('/penerimaan/categories', [PenerimaanController::class, 'categories'])->middleware('can:penerimaan.view');
@@ -178,6 +185,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/penerimaan/{penerimaan}/attachment', [PenerimaanController::class, 'downloadAttachment'])->middleware('can:penerimaan.view');
     Route::delete('/penerimaan/{penerimaan}', [PenerimaanController::class, 'destroy']);
     Route::post('/penerimaan/{penerimaan}/void', [PenerimaanController::class, 'void'])->middleware('can:penerimaan.void');
+    Route::patch('/penerimaan/{penerimaan}', [PenerimaanController::class, 'update'])->middleware('can:penerimaan.create');
+    Route::post('/penerimaan/{penerimaan}/submit', [PenerimaanController::class, 'submit'])->middleware('can:penerimaan.create');
+    Route::post('/penerimaan/{penerimaan}/reject', [PenerimaanController::class, 'reject'])->middleware('can:penerimaan.approve');
 
     // Manual Journal Entry
     Route::get('/journal-entries', [ManualJournalController::class, 'index'])->middleware('can:journal.view');

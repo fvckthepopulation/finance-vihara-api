@@ -46,6 +46,8 @@ class TransactionController extends Controller
         // Nama vihara ikut dikirim: tanpa ini klien hanya punya id, dan tabel
         // lintas-vihara tidak bisa menunjukkan baris ini milik vihara mana.
         $viharaNames = \App\Models\Vihara::query()->pluck('name', 'id');
+        // Nama pengaju — dipakai menu Persetujuan untuk memilah antrean.
+        $namaPengguna = \App\Models\User::query()->pluck('name', 'id');
         // Cadangan label rekening. Baris yang lahir di luar form — mis.
         // komisi settlement KalyanaMitta — hanya punya kode akun kas/bank,
         // tanpa bank_account_id. Tanpa cadangan ini kolom Rekening-nya kosong
@@ -75,6 +77,13 @@ class TransactionController extends Controller
                 'has_attachment' => (bool) $row->has_attachment,
                 'voided_at' => $row->voided_at,
                 'void_reason' => $row->void_reason,
+                'submitted_at' => $row->submitted_at,
+                'rejected_at' => $row->rejected_at,
+                'reject_reason' => $row->reject_reason,
+                'submitted_by' => $row->submitted_by_user_id !== null
+                    ? ($namaPengguna[(int) $row->submitted_by_user_id] ?? null)
+                    : null,
+                'submitted_by_user_id' => $row->submitted_by_user_id !== null ? (int) $row->submitted_by_user_id : null,
                 'bank_account_id' => $row->bank_account_id !== null ? (int) $row->bank_account_id : null,
                 'bank_label' => $row->bank_account_id !== null
                     ? ($bankLabels[(int) $row->bank_account_id] ?? null)
@@ -145,7 +154,8 @@ class TransactionController extends Controller
             'from' => ['sometimes', 'nullable', 'date'],
             'to' => ['sometimes', 'nullable', 'date'],
             'sumber' => ['sometimes', 'nullable', 'in:km,manual'],
-            'status' => ['sometimes', 'nullable', 'in:draft,posted,cancelled'],
+            'status' => ['sometimes', 'nullable', 'in:draft,submitted,posted,rejected,cancelled'],
+            'submitted_by' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
             'vihara_id' => ['sometimes', 'integer', 'exists:viharas,id'],
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:200'],
@@ -171,7 +181,7 @@ class TransactionController extends Controller
                 . 'status, source_name AS counterparty, reference, description, vihara_id, bank_account_id, '
                 . 'destination_account_code AS cash_account_code, '
                 . 'CASE WHEN attachment_path IS NULL THEN 0 ELSE 1 END AS has_attachment, '
-                . 'voided_at, void_reason',
+                . 'voided_at, void_reason, submitted_at, rejected_at, reject_reason, submitted_by_user_id',
             );
             if ($sumber === 'km') {
                 $p->where('method', 'auto_credit');
@@ -187,7 +197,7 @@ class TransactionController extends Controller
                 . "'manual' AS source, status, payee_name AS counterparty, reference, description, vihara_id, bank_account_id, "
                 . 'source_account_code AS cash_account_code, '
                 . 'CASE WHEN attachment_path IS NULL THEN 0 ELSE 1 END AS has_attachment, '
-                . 'voided_at, void_reason',
+                . 'voided_at, void_reason, submitted_at, rejected_at, reject_reason, submitted_by_user_id',
             );
             if ($sumber === 'km') {
                 // Semua pengeluaran adalah manual — filter km mengosongkan branch ini.
@@ -213,11 +223,15 @@ class TransactionController extends Controller
         if ($status = $request->string('status')->toString()) {
             $q->where('status', $status);
         } else {
-            $q->whereIn('status', ['draft', 'posted', 'cancelled']);
+            $q->whereIn('status', ['draft', 'submitted', 'posted', 'rejected', 'cancelled']);
         }
 
         if ($viharaIds !== null) {
             $q->whereIn('vihara_id', $viharaIds);
+        }
+
+        if ($pengaju = $request->integer('submitted_by')) {
+            $q->where('submitted_by_user_id', $pengaju);
         }
         if ($category = $request->string('category')->toString()) {
             $q->where('category', $category);
@@ -251,8 +265,17 @@ class TransactionController extends Controller
             ->all();
     }
 
-    private function categoryLabel(string $category): string
+    /**
+     * Sejak draft boleh belum punya kategori (lihat migrasi siklus draft),
+     * nilainya bisa null — jangan sampai satu draft setengah jadi membuat
+     * seluruh daftar transaksi gagal dimuat.
+     */
+    private function categoryLabel(?string $category): string
     {
+        if ($category === null || $category === '') {
+            return '—';
+        }
+
         if (isset(self::PENERIMAAN_LABELS[$category])) {
             return self::PENERIMAAN_LABELS[$category];
         }

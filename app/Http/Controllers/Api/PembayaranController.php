@@ -18,6 +18,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PembayaranController extends Controller
 {
+    use \App\Http\Controllers\Api\Concerns\SiklusPersetujuan;
+
     public function index(Request $request): JsonResponse
     {
         $q = Pembayaran::query()
@@ -58,12 +60,21 @@ class PembayaranController extends Controller
                 'entity', 'vihara:id,code,name', 'bankAccount:id,bank_name,account_number', 'payee',
                 'sourceAccount:code,name', 'debitAccount:code,name',
                 'journalEntry.lines',
+                // Jejak siklus: siapa mengajukan, menyetujui, atau menolak.
+                // Inilah penyetuju yang sah — berbeda dari kolom teks bebas
+                // approved_by_name yang dulu diketik penginput sendiri.
+                'submittedBy:id,name', 'postedBy:id,name', 'rejectedBy:id,name',
             ]),
         );
     }
 
     public function store(Request $request): JsonResponse
     {
+        // Mode draft: pekerjaan setengah jadi boleh disimpan dengan hanya
+        // yayasan + vihara. Kelengkapannya ditegakkan saat DIAJUKAN atau
+        // DISETUJUI, bukan saat disimpan — lihat Concerns\SiklusPersetujuan.
+        $draft = $request->boolean('draft');
+
         $data = $request->validate([
             'date' => ['required', 'date'],
             'method' => ['required', 'in:transfer,tunai,auto_debit'],
@@ -77,7 +88,7 @@ class PembayaranController extends Controller
             // menerima kunci mentah `validation.required` pada field yang
             // bahkan tidak ada di formnya.
             'bank_account_id' => [
-                Rule::requiredIf(fn () => $request->input('method') !== 'tunai' && ! $request->filled('source_account_code')),
+                Rule::requiredIf(fn () => ! $draft && $request->input('method') !== 'tunai' && ! $request->filled('source_account_code')),
                 'nullable', 'integer', 'exists:vihara_bank_accounts,id',
             ],
             // Tunai default ke 1115 Kas Penerimaan Langsung; transfer/
@@ -88,13 +99,20 @@ class PembayaranController extends Controller
             // divalidasi bentuknya — supaya saat dua-duanya kosong pengguna
             // menerima SATU pesan, bukan dua.
             'source_account_code' => ['sometimes', 'nullable', 'exists:accounts,code'],
-            'category' => ['required', 'in:' . implode(',', array_keys(Pembayaran::CATEGORIES))],
+            'category' => [
+                Rule::requiredIf(! $draft),
+                'nullable', 'in:' . implode(',', array_keys(Pembayaran::CATEGORIES)),
+            ],
             'name' => [
                 'sometimes', 'nullable', 'string', 'max:255',
-                // Nama Pengeluaran harus terdaftar di master, sesuai kategorinya.
-                Rule::exists('transaction_names', 'name')
-                    ->where('type', 'pengeluaran')
-                    ->where('category', (string) $request->input('category')),
+                // Nama Pengeluaran harus terdaftar di master, sesuai
+                // kategorinya. Pada draft tanpa kategori, pencocokan ini
+                // dilewati — belum ada kategori untuk dicocokkan.
+                Rule::when($request->filled('category'), [
+                    Rule::exists('transaction_names', 'name')
+                        ->where('type', 'pengeluaran')
+                        ->where('category', (string) $request->input('category')),
+                ]),
             ],
             'entity_id' => ['sometimes', 'nullable', 'exists:entities,id'],
             'payee_id' => ['sometimes', 'nullable', 'exists:payees,id'],
@@ -102,7 +120,7 @@ class PembayaranController extends Controller
             'approved_by_name' => ['sometimes', 'nullable', 'string', 'max:255'],
             'debit_account_code' => ['sometimes', 'nullable', 'exists:accounts,code'],
             'reference' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'amount' => ['required', 'numeric', 'gt:0'],
+            'amount' => [Rule::requiredIf(! $draft), 'nullable', 'numeric', 'gt:0'],
             'description' => ['sometimes', 'nullable', 'string'],
         ], [
             'bank_account_id.required' => 'Transfer dari Rekening wajib dipilih.',
@@ -146,16 +164,17 @@ class PembayaranController extends Controller
             $data['entity_id'] = $request->user()->entity_id
                 ?? \App\Models\Entity::query()->value('id');
         }
-        if (empty($data['source_account_code'])) {
+        if (empty($data['source_account_code']) && ! $draft) {
             $data['source_account_code'] = '1115'; // Kas Penerimaan Langsung — hanya tercapai saat method tunai
         }
 
         PeriodLockService::guard($data['entity_id'], $data['date'], 'date');
 
-        if (empty($data['debit_account_code'])) {
+        if (empty($data['debit_account_code']) && ! empty($data['category'])) {
             $data['debit_account_code'] = Pembayaran::CATEGORIES[$data['category']]['default_debit'];
         }
-        if ($data['source_account_code'] === $data['debit_account_code']) {
+        if (! empty($data['source_account_code'])
+            && $data['source_account_code'] === ($data['debit_account_code'] ?? null)) {
             return response()->json([
                 'message' => 'Source account dan debit account tidak boleh sama.',
             ], 422);
@@ -175,8 +194,23 @@ class PembayaranController extends Controller
 
     public function post(Request $request, Pembayaran $pembayaran): JsonResponse
     {
-        if ($pembayaran->status !== 'draft') {
-            return response()->json(['message' => 'Pembayaran tidak dalam status draft.'], 422);
+        ViharaScopeService::guardRecord($request, $pembayaran->vihara_id);
+
+        // Dua jalur sah menuju posted: lewat antrean (submitted), atau
+        // langsung dari draft oleh pengguna yang memang berhak menyetujui —
+        // itulah tombol "Submit Pengeluaran". Yang sudah posted atau
+        // dibatalkan tidak boleh diposting ulang.
+        if (! in_array($pembayaran->status, ['draft', 'submitted'], true)) {
+            return response()->json([
+                'message' => 'Pembayaran ini sudah diproses, tidak bisa diposting lagi.',
+            ], 422);
+        }
+
+        $kurang = $this->kelengkapanKurang($pembayaran);
+        if ($kurang) {
+            return response()->json([
+                'message' => 'Lengkapi dulu: ' . implode(', ', $kurang) . '.',
+            ], 422);
         }
 
         DB::transaction(function () use ($pembayaran, $request) {
@@ -242,6 +276,84 @@ class PembayaranController extends Controller
         VoidService::void($pembayaran, $request->user(), $data['reason'], 'Pembayaran');
 
         return response()->json($pembayaran->fresh());
+    }
+
+    /** Kolom yang wajib terisi sebelum sebuah pengeluaran boleh naik. */
+    private const WAJIB_LENGKAP = [
+        'amount' => 'Jumlah',
+        'category' => 'Kategori Biaya',
+        'source_account_code' => 'Transfer dari Rekening',
+        'debit_account_code' => 'Akun debet',
+    ];
+
+    /** @return string[] nama field yang masih kosong */
+    private function kelengkapanKurang(Pembayaran $p): array
+    {
+        $kurang = [];
+        foreach (self::WAJIB_LENGKAP as $kolom => $label) {
+            if ($p->{$kolom} === null || $p->{$kolom} === '' || $p->{$kolom} == 0) {
+                $kurang[] = $label;
+            }
+        }
+
+        return $kurang;
+    }
+
+    /**
+     * PATCH /api/pembayaran/{id} — ubah draft yang belum diajukan.
+     *
+     * Hanya draft dan yang ditolak: begitu masuk antrean atau terposting,
+     * isinya tidak boleh berubah di belakang approver.
+     */
+    public function update(Request $request, Pembayaran $pembayaran): JsonResponse
+    {
+        ViharaScopeService::guardRecord($request, $pembayaran->vihara_id);
+
+        if (! in_array($pembayaran->status, ['draft', 'rejected'], true)) {
+            return response()->json([
+                'message' => 'Hanya pengeluaran berstatus draft atau ditolak yang bisa diubah.',
+            ], 422);
+        }
+
+        $data = $request->validate([
+            'date' => ['sometimes', 'date'],
+            'bank_account_id' => ['sometimes', 'nullable', 'integer', 'exists:vihara_bank_accounts,id'],
+            'category' => ['sometimes', 'nullable', 'in:' . implode(',', array_keys(Pembayaran::CATEGORIES))],
+            'name' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'payee_name' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'reference' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'amount' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
+            'description' => ['sometimes', 'nullable', 'string'],
+        ]);
+
+        if (array_key_exists('bank_account_id', $data) && ! empty($data['bank_account_id'])) {
+            $rek = \App\Models\ViharaBankAccount::find($data['bank_account_id']);
+            if ((int) $rek->vihara_id !== (int) $pembayaran->vihara_id) {
+                return response()->json([
+                    'message' => 'Rekening bank bukan milik vihara transaksi ini.',
+                ], 422);
+            }
+            $data['source_account_code'] = $rek->coa_account_code;
+        }
+        if (! empty($data['category'])) {
+            $data['debit_account_code'] = Pembayaran::CATEGORIES[$data['category']]['default_debit'];
+        }
+
+        $pembayaran->fill($data)->save();
+
+        return response()->json($pembayaran->fresh());
+    }
+
+    /** POST /api/pembayaran/{id}/submit — ajukan draft ke persetujuan. */
+    public function submit(Request $request, Pembayaran $pembayaran): JsonResponse
+    {
+        return $this->ajukan($request, $pembayaran, 'pengeluaran', self::WAJIB_LENGKAP);
+    }
+
+    /** POST /api/pembayaran/{id}/reject — tolak pengajuan, dengan alasan. */
+    public function reject(Request $request, Pembayaran $pembayaran): JsonResponse
+    {
+        return $this->tolak($request, $pembayaran, 'pengeluaran');
     }
 
     public function destroy(Request $request, Pembayaran $pembayaran): JsonResponse

@@ -18,6 +18,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PenerimaanController extends Controller
 {
+    use \App\Http\Controllers\Api\Concerns\SiklusPersetujuan;
+
     public function index(Request $request): JsonResponse
     {
         $q = Penerimaan::query()
@@ -64,6 +66,9 @@ class PenerimaanController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        // Lihat PembayaranController::store — alasannya sama persis.
+        $draft = $request->boolean('draft');
+
         $data = $request->validate([
             'date' => ['required', 'date'],
             'method' => ['required', 'in:transfer,tunai,auto_credit'],
@@ -77,13 +82,15 @@ class PenerimaanController extends Controller
                 Rule::requiredIf(fn () => $request->input('method') !== 'tunai' && ! $request->filled('bank_account_id')),
                 'nullable', 'exists:accounts,code',
             ],
-            'category' => ['required', 'in:' . implode(',', array_keys(Penerimaan::CATEGORIES))],
+            'category' => [Rule::requiredIf(! $draft), 'nullable', 'in:' . implode(',', array_keys(Penerimaan::CATEGORIES))],
             'name' => [
                 'sometimes', 'nullable', 'string', 'max:255',
                 // Nama Penerimaan harus terdaftar di master, sesuai kategorinya.
-                Rule::exists('transaction_names', 'name')
-                    ->where('type', 'penerimaan')
-                    ->where('category', (string) $request->input('category')),
+                Rule::when($request->filled('category'), [
+                    Rule::exists('transaction_names', 'name')
+                        ->where('type', 'penerimaan')
+                        ->where('category', (string) $request->input('category')),
+                ]),
             ],
             'entity_id' => ['sometimes', 'nullable', 'exists:entities,id'],
             'source_payee_id' => ['sometimes', 'nullable', 'exists:payees,id'],
@@ -91,7 +98,7 @@ class PenerimaanController extends Controller
             'received_by' => ['sometimes', 'nullable', 'string', 'max:255'],
             'credit_account_code' => ['sometimes', 'nullable', 'exists:accounts,code'],
             'reference' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'amount' => ['required', 'numeric', 'gt:0'],
+            'amount' => [Rule::requiredIf(! $draft), 'nullable', 'numeric', 'gt:0'],
             'description' => ['sometimes', 'nullable', 'string'],
         ]);
 
@@ -156,8 +163,19 @@ class PenerimaanController extends Controller
 
     public function post(Request $request, Penerimaan $penerimaan): JsonResponse
     {
-        if ($penerimaan->status !== 'draft') {
-            return response()->json(['message' => 'Penerimaan tidak dalam status draft.'], 422);
+        ViharaScopeService::guardRecord($request, $penerimaan->vihara_id);
+
+        if (! in_array($penerimaan->status, ['draft', 'submitted'], true)) {
+            return response()->json([
+                'message' => 'Penerimaan ini sudah diproses, tidak bisa diposting lagi.',
+            ], 422);
+        }
+
+        $kurang = $this->kelengkapanKurang($penerimaan);
+        if ($kurang) {
+            return response()->json([
+                'message' => 'Lengkapi dulu: ' . implode(', ', $kurang) . '.',
+            ], 422);
         }
 
         DB::transaction(function () use ($penerimaan, $request) {
@@ -321,6 +339,75 @@ class PenerimaanController extends Controller
         VoidService::void($penerimaan, $request->user(), $data['reason'], 'Penerimaan');
 
         return response()->json($penerimaan->fresh());
+    }
+
+    private const WAJIB_LENGKAP = [
+        'amount' => 'Jumlah',
+        'category' => 'Kategori Dana',
+        'destination_account_code' => 'Rekening tujuan',
+        'credit_account_code' => 'Akun kredit',
+    ];
+
+    /** @return string[] */
+    private function kelengkapanKurang(Penerimaan $p): array
+    {
+        $kurang = [];
+        foreach (self::WAJIB_LENGKAP as $kolom => $label) {
+            if ($p->{$kolom} === null || $p->{$kolom} === '' || $p->{$kolom} == 0) {
+                $kurang[] = $label;
+            }
+        }
+
+        return $kurang;
+    }
+
+    /** PATCH /api/penerimaan/{id} — ubah draft / yang ditolak. */
+    public function update(Request $request, Penerimaan $penerimaan): JsonResponse
+    {
+        ViharaScopeService::guardRecord($request, $penerimaan->vihara_id);
+
+        if (! in_array($penerimaan->status, ['draft', 'rejected'], true)) {
+            return response()->json([
+                'message' => 'Hanya penerimaan berstatus draft atau ditolak yang bisa diubah.',
+            ], 422);
+        }
+
+        $data = $request->validate([
+            'date' => ['sometimes', 'date'],
+            'bank_account_id' => ['sometimes', 'nullable', 'integer', 'exists:vihara_bank_accounts,id'],
+            'category' => ['sometimes', 'nullable', 'in:' . implode(',', array_keys(Penerimaan::CATEGORIES))],
+            'name' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'source_name' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'received_by' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'reference' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'amount' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
+            'description' => ['sometimes', 'nullable', 'string'],
+        ]);
+
+        if (! empty($data['bank_account_id'])) {
+            $rek = \App\Models\ViharaBankAccount::find($data['bank_account_id']);
+            if ((int) $rek->vihara_id !== (int) $penerimaan->vihara_id) {
+                return response()->json(['message' => 'Rekening bank bukan milik vihara transaksi ini.'], 422);
+            }
+            $data['destination_account_code'] = $rek->coa_account_code;
+        }
+        if (! empty($data['category'])) {
+            $data['credit_account_code'] = Penerimaan::CATEGORIES[$data['category']]['default_credit'];
+        }
+
+        $penerimaan->fill($data)->save();
+
+        return response()->json($penerimaan->fresh());
+    }
+
+    public function submit(Request $request, Penerimaan $penerimaan): JsonResponse
+    {
+        return $this->ajukan($request, $penerimaan, 'penerimaan', self::WAJIB_LENGKAP);
+    }
+
+    public function reject(Request $request, Penerimaan $penerimaan): JsonResponse
+    {
+        return $this->tolak($request, $penerimaan, 'penerimaan');
     }
 
     public function destroy(Request $request, Penerimaan $penerimaan): JsonResponse

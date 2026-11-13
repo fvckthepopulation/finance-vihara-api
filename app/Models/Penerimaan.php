@@ -48,11 +48,20 @@ class Penerimaan extends Model
      * 43x0 tunai; digit ke-3 = 1 (TP) / 2 (DP). Kategori tanpa restriction
      * (suspense) memakai default_credit tetap (2310).
      */
-    public static function creditCodeFor(string $category, ?string $method): string
+    public static function creditCodeFor(string $category, ?string $method): ?string
     {
-        $meta = self::CATEGORIES[$category];
+        // Sejak FV-45 kategori dana boleh ditambah admin lewat master, jadi
+        // kode yang sampai ke sini belum pasti ada di konstanta ini. Yang
+        // tidak dikenal TIDAK bisa diturunkan — akunnya harus disebut di
+        // master (akun bawaan kategori, atau COA di nama penerimaannya).
+        // Mengembalikan null, bukan menebak, supaya kekosongannya tertangkap
+        // pemeriksaan kelengkapan saat pengajuan/persetujuan.
+        $meta = self::CATEGORIES[$category] ?? null;
+        if ($meta === null) {
+            return null;
+        }
         if (($meta['restriction'] ?? null) === null) {
-            return $meta['default_credit'];
+            return $meta['default_credit'] ?? null;
         }
         $prefix = self::CHANNEL_PREFIX[$method] ?? self::CHANNEL_PREFIX['transfer'];
 
@@ -96,6 +105,27 @@ class Penerimaan extends Model
     public function creditAccount(): BelongsTo
     {
         return $this->belongsTo(Account::class, 'credit_account_code', 'code');
+    }
+
+    /** Pembuat baris — yang berhak melanjutkan draftnya (FV-44/FV-45). */
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    public function submittedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'submitted_by_user_id');
+    }
+
+    public function postedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'posted_by_user_id');
+    }
+
+    public function rejectedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rejected_by_user_id');
     }
 
     public function journalEntry(): BelongsTo

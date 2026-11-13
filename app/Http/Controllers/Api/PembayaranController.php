@@ -65,7 +65,7 @@ class PembayaranController extends Controller
                 // Jejak siklus: siapa mengajukan, menyetujui, atau menolak.
                 // Inilah penyetuju yang sah — berbeda dari kolom teks bebas
                 // approved_by_name yang dulu diketik penginput sendiri.
-                'submittedBy:id,name', 'postedBy:id,name', 'rejectedBy:id,name',
+                'createdBy:id,name', 'submittedBy:id,name', 'postedBy:id,name', 'rejectedBy:id,name',
             ]),
         );
     }
@@ -333,6 +333,7 @@ class PembayaranController extends Controller
     public function update(Request $request, Pembayaran $pembayaran): JsonResponse
     {
         ViharaScopeService::guardRecord($request, $pembayaran->vihara_id);
+        $this->guardPemilikDraft($request, $pembayaran, 'pengeluaran');
 
         if (! in_array($pembayaran->status, ['draft', 'rejected'], true)) {
             return response()->json([
@@ -351,10 +352,33 @@ class PembayaranController extends Controller
             ],
             'name' => ['sometimes', 'nullable', 'string', 'max:255'],
             'payee_name' => ['sometimes', 'nullable', 'string', 'max:255'],
+            // Penerima dari master (FV-31) — ikut bisa diubah, kalau tidak
+            // rekap per penerima jadi salah begitu draft disunting.
+            'payee_id' => ['sometimes', 'nullable', 'integer', 'exists:payees,id'],
             'reference' => ['sometimes', 'nullable', 'string', 'max:100'],
             'amount' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'description' => ['sometimes', 'nullable', 'string'],
         ]);
+
+        // Nama Pengeluaran yang dikirim harus ada di master DAN berlaku untuk
+        // vihara baris ini — aturan yang sama dengan store(). Tanpa ini,
+        // penyuntingan draft jadi pintu belakang untuk nama khusus vihara
+        // lain, atau nama yang sudah dihapus dari master.
+        if (! empty($data['name'])) {
+            $kategori = $data['category'] ?? $pembayaran->category;
+            $adaDiMaster = TransactionName::query()
+                ->where('type', 'pengeluaran')
+                ->where('name', $data['name'])
+                ->when($kategori, fn ($q) => $q->where('category', $kategori))
+                ->exists();
+            if (! $adaDiMaster
+                || ! TransactionName::usableForVihara('pengeluaran', $data['name'], (int) $pembayaran->vihara_id)) {
+                return response()->json([
+                    'message' => "Nama Pengeluaran '{$data['name']}' tidak berlaku untuk vihara ini.",
+                    'errors' => ['name' => ["Nama Pengeluaran '{$data['name']}' tidak berlaku untuk vihara ini."]],
+                ], 422);
+            }
+        }
 
         if (array_key_exists('bank_account_id', $data) && ! empty($data['bank_account_id'])) {
             $rek = \App\Models\ViharaBankAccount::find($data['bank_account_id']);
@@ -396,12 +420,15 @@ class PembayaranController extends Controller
         // menghapus draft vihara lain hanya dengan menebak id.
         ViharaScopeService::guardRecord($request, $pembayaran->vihara_id);
 
-        // Pencatat boleh membuang draftnya sendiri; penyetuju boleh
-        // menolak draft orang lain. Keduanya hanya draft.
+        // Pencatat membuang draftnya SENDIRI. Approver tidak menghapus draft
+        // orang lain: yang sudah diajukan ditolak lewat /reject supaya
+        // pembuatnya tahu alasannya, dan yang masih draft belum pernah
+        // dilihat approver (FV-44 poin 5).
         $u = $request->user();
-        if (! $u->can('pembayaran.create') && ! $u->can('pembayaran.approve')) {
+        if (! $u->can('pembayaran.create') && ! $u->hasRole('superadmin')) {
             abort(403, 'Anda tidak berhak menghapus draft pembayaran.');
         }
+        $this->guardPemilikDraft($request, $pembayaran, 'pengeluaran');
 
         if ($pembayaran->status !== 'draft') {
             return response()->json(['message' => 'Hanya pembayaran draft yang bisa dihapus.'], 422);

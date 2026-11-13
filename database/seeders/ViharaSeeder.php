@@ -57,5 +57,17 @@ class ViharaSeeder extends Seeder
                 ],
             );
         }
+
+        // Unit Umum/Pusat tiap yayasan (P-01).
+        //
+        // Di produksi unit ini dibuat oleh migrasi 2026_11_13_140000, dan
+        // untuk yayasan BARU oleh EntityController::store. Keduanya tidak
+        // menolong `migrate:fresh --seed`: migrasi berjalan SEBELUM seeder
+        // membuat yayasan dan viharanya, jadi di database bersih tidak ada
+        // satu pun unit Umum — dan sejumlah skenario memang menghitungnya.
+        // Logikanya sendiri satu tempat: Entity::pastikanUnitUmum().
+        foreach (Entity::all() as $yayasan) {
+            $yayasan->pastikanUnitUmum();
+        }
     }
 }

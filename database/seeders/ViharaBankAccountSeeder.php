@@ -7,9 +7,18 @@ use App\Models\ViharaBankAccount;
 use Illuminate\Database\Seeder;
 
 /**
- * Master rekening bank per vihara. VVG punya dua rekening riil (BCA +
- * Mandiri); VBM/VAD masing-masing satu placeholder BCA sampai nomor
- * rekening sebenarnya tersedia.
+ * Master rekening — milik YAYASAN sejak FV-36, bukan vihara.
+ *
+ * Bentuk datanya menyamai hasil migrasi di produksi: dua rekening riil VVG
+ * (BCA + Mandiri) dipakai VVG saja, dan satu rekening placeholder BCA dipakai
+ * bersama VBM dan VAD. Pivot `viharas` yang KOSONG berarti seluruh vihara di
+ * yayasan itu boleh memakainya; di sini sengaja diisi, supaya data contoh
+ * tetap mewakili rekening yang memang terbatas pemakainya.
+ *
+ * Catatan kenapa berkas ini sempat rusak: FV-36 memindahkan pemilik rekening
+ * dari vihara ke yayasan dan MENGHAPUS kolom vihara_id, tapi seeder ini masih
+ * mencarinya. Migrasinya sendiri benar — rekening produksi ikut terbawa — yang
+ * tidak jalan hanya `migrate:fresh --seed` di mesin pengembang.
  */
 class ViharaBankAccountSeeder extends Seeder
 {
@@ -17,31 +26,43 @@ class ViharaBankAccountSeeder extends Seeder
     {
         $vvg = Vihara::where('code', 'VVG')->first();
         if ($vvg) {
-            $accounts = [
-                ['bank_name' => 'Bank BCA',     'account_number' => '6280-3488-88',    'account_name' => $vvg->name],
+            $rekening = [
+                ['bank_name' => 'Bank BCA',     'account_number' => '6280-3488-88',     'account_name' => $vvg->name],
                 ['bank_name' => 'Bank Mandiri', 'account_number' => '1570-0122-5555-4', 'account_name' => $vvg->name],
             ];
-            foreach ($accounts as $a) {
-                ViharaBankAccount::updateOrCreate(
-                    ['vihara_id' => $vvg->id, 'bank_name' => $a['bank_name'], 'account_number' => $a['account_number']],
-                    $a + ['coa_account_code' => '1130', 'active' => true],
+            foreach ($rekening as $r) {
+                $baris = ViharaBankAccount::updateOrCreate(
+                    [
+                        'entity_id' => $vvg->entity_id,
+                        'bank_name' => $r['bank_name'],
+                        'account_number' => $r['account_number'],
+                    ],
+                    $r + ['type' => 'bank', 'coa_account_code' => '1130', 'active' => true],
                 );
+                // syncWithoutDetaching, bukan sync: kalau admin sudah menambah
+                // vihara pengguna lain, seeder tidak mencabutnya.
+                $baris->viharas()->syncWithoutDetaching([$vvg->id]);
             }
         }
 
-        foreach (['VBM', 'VAD'] as $code) {
-            $vihara = Vihara::where('code', $code)->first();
-            if (! $vihara) {
-                continue;
-            }
-            ViharaBankAccount::updateOrCreate(
-                ['vihara_id' => $vihara->id, 'bank_name' => 'Bank BCA', 'account_number' => '0000-0000-00'],
+        // Satu placeholder untuk VBM + VAD: nomornya sama, dan sejak rekening
+        // milik yayasan, nomor yang sama di satu yayasan memang SATU rekening.
+        $bersama = Vihara::whereIn('code', ['VBM', 'VAD'])->get();
+        if ($bersama->isNotEmpty()) {
+            $baris = ViharaBankAccount::updateOrCreate(
                 [
-                    'account_name' => $vihara->name,
+                    'entity_id' => $bersama->first()->entity_id,
+                    'bank_name' => 'Bank BCA',
+                    'account_number' => '0000-0000-00',
+                ],
+                [
+                    'type' => 'bank',
+                    'account_name' => 'Yayasan (placeholder)',
                     'coa_account_code' => '1130',
                     'active' => true,
                 ],
             );
+            $baris->viharas()->syncWithoutDetaching($bersama->pluck('id')->all());
         }
     }
 }

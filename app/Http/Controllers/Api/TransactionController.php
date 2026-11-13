@@ -112,15 +112,17 @@ class TransactionController extends Controller
         return response()->streamDownload(function () use ($rows, $viharaNames) {
             $out = fopen('php://output', 'w');
             fwrite($out, "\xEF\xBB\xBF"); // UTF-8 BOM supaya Excel baca benar
+            // No. Transaksi di depan, sama seperti kolom pertama di daftar
+            // (FV-40): itulah pegangan saat mencocokkan CSV dengan jurnal.
             fputcsv($out, [
-                'Tanggal', 'Tipe', 'Kode', 'Nama', 'Kategori', 'Jumlah', 'Metode',
+                'No. Transaksi', 'Tanggal', 'Tipe', 'Nama', 'Kategori', 'Jumlah', 'Metode',
                 'Sumber', 'Status', 'Donatur/Penerima', 'Vihara', 'Catatan',
             ]);
             foreach ($rows->cursor() as $row) {
                 fputcsv($out, [
+                    $row->code,
                     $row->date,
                     $row->tipe,
-                    $row->code,
                     $row->name,
                     $this->categoryLabel($row->category),
                     $row->amount,
@@ -143,6 +145,34 @@ class TransactionController extends Controller
     {
         $user = $request->user();
         abort_unless($user->can('penerimaan.view') || $user->can('pembayaran.view'), 403);
+    }
+
+    /**
+     * Daftar per modul (Daftar Pengeluaran / Daftar Penerimaan, FV-38).
+     *
+     * Datanya sama dengan Semua Transaksi, izinnya tidak: daftar penerimaan
+     * cukup butuh penerimaan.view, dan daftar pengeluaran pembayaran.view.
+     * Tanpa rute tersendiri, kedua layar itu menumpang transaksi.view —
+     * artinya role yang hanya boleh melihat penerimaannya sendiri harus
+     * diberi izin menu Semua Transaksi sekadar supaya daftarnya hidup.
+     *
+     * Penjagaannya per `tipe`, sehingga izin satu modul tidak membuka modul
+     * yang lain.
+     */
+    public function daftar(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $tipe = $request->string('tipe')->toString();
+        if ($tipe === 'Penerimaan') {
+            abort_unless($user->can('penerimaan.view'), 403);
+        } elseif ($tipe === 'Pengeluaran') {
+            abort_unless($user->can('pembayaran.view'), 403);
+        } else {
+            // Gabungan keduanya = layar Semua Transaksi; itu izinnya sendiri.
+            abort_unless($user->can('transaksi.view'), 403);
+        }
+
+        return $this->index($request);
     }
 
     private function validateFilters(Request $request): void
@@ -283,6 +313,11 @@ class TransactionController extends Controller
             return $label;
         }
 
-        return Penerimaan::CATEGORIES[$category]['label'] ?? ucwords(str_replace('_', ' ', $category));
+        // Kategori dana buatan admin (FV-45) hanya ada di master.
+        if ($label = \App\Models\TransactionCategory::labelPenerimaan($category)) {
+            return $label;
+        }
+
+        return ucwords(str_replace('_', ' ', $category));
     }
 }

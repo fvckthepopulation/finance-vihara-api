@@ -18,6 +18,31 @@ use Illuminate\Http\Request;
 trait SiklusPersetujuan
 {
     /**
+     * Siapa yang boleh melanjutkan sebuah draft: PEMBUATNYA, dan superadmin.
+     *
+     * Jangkauan vihara saja tidak cukup. Satu vihara bisa punya beberapa
+     * pencatat, dan draft adalah pekerjaan setengah jadi milik satu orang —
+     * bukan antrean bersama. Tanpa penjagaan ini, rekan satu vihara bisa
+     * mengubah atau menghapus draft orang lain, dan pemiliknya tidak pernah
+     * tahu apa yang berubah (FV-44 poin 5).
+     *
+     * Baris impor (mis. donasi KalyanaMitta) tidak punya pembuat; yang itu
+     * hanya superadmin yang boleh menyentuhnya.
+     */
+    protected function guardPemilikDraft(Request $request, Model $row, string $label): void
+    {
+        $user = $request->user();
+        if ($user->hasRole('superadmin')) {
+            return;
+        }
+        if ($row->created_by_user_id !== null && (int) $row->created_by_user_id === (int) $user->id) {
+            return;
+        }
+
+        abort(403, "Hanya pembuat draft {$label} ini yang bisa mengubah, menghapus, atau mengajukannya.");
+    }
+
+    /**
      * Ajukan draft ke antrean persetujuan.
      *
      * Kelengkapan ditegakkan DI SINI, bukan saat penyimpanan: draft memang
@@ -26,6 +51,7 @@ trait SiklusPersetujuan
     protected function ajukan(Request $request, Model $row, string $label, array $wajib): JsonResponse
     {
         ViharaScopeService::guardRecord($request, $row->vihara_id);
+        $this->guardPemilikDraft($request, $row, $label);
 
         // Yang DITOLAK juga boleh diajukan lagi — itu memang gunanya
         // penolakan: dikembalikan untuk diperbaiki, bukan dibuang.

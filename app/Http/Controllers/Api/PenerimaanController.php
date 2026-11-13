@@ -20,6 +20,43 @@ class PenerimaanController extends Controller
 {
     use \App\Http\Controllers\Api\Concerns\SiklusPersetujuan;
 
+    /** Kas Penerimaan Langsung — tujuan dana untuk metode Tunai. */
+    private const AKUN_KAS_PENERIMAAN = '1115';
+
+    /**
+     * Akun pendapatan untuk satu penerimaan.
+     *
+     * Urutannya: COA yang dipasang di master Nama Penerimaan (FV-45 poin 5),
+     * lalu akun bawaan kategori di master, baru aturan kanal × pembatasan
+     * (41x0 KM, 42x0 transfer, 43x0 tunai; suspense 2310).
+     *
+     * Dua tingkat pertama sengaja dibiarkan KOSONG oleh migrasi master: tanpa
+     * isian, perilakunya persis seperti sebelumnya. Mengisi COA di master
+     * berarti memilih akun tetap untuk nama itu, dan dengan sendirinya
+     * melepasnya dari pembedaan kanal — itu keputusan yang harus disengaja,
+     * bukan efek samping.
+     */
+    private function akunKredit(string $category, ?string $name, ?string $method): ?string
+    {
+        if ($name !== null && $name !== '') {
+            $akun = \App\Models\TransactionName::query()
+                ->where('type', 'penerimaan')
+                ->where('category', $category)
+                ->where('name', $name)
+                ->value('coa_account_code');
+            if ($akun) {
+                return $akun;
+            }
+        }
+
+        $bawaan = \App\Models\TransactionCategory::query()
+            ->where('type', \App\Models\TransactionCategory::TYPE_PENERIMAAN)
+            ->where('code', $category)
+            ->value('default_debit_code');
+
+        return $bawaan ?: Penerimaan::creditCodeFor($category, $method);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $q = Penerimaan::query()
@@ -60,6 +97,9 @@ class PenerimaanController extends Controller
                 'entity', 'vihara:id,code,name', 'bankAccount:id,bank_name,account_number', 'sourcePayee',
                 'destinationAccount:code,name', 'creditAccount:code,name',
                 'journalEntry.lines',
+                // Jejak siklus, sama seperti pengeluaran (FV-45 poin 10):
+                // penyetuju dan waktunya dicatat sistem, tidak diketik.
+                'createdBy:id,name', 'submittedBy:id,name', 'postedBy:id,name', 'rejectedBy:id,name',
             ]),
         );
     }
@@ -82,7 +122,15 @@ class PenerimaanController extends Controller
                 Rule::requiredIf(fn () => $request->input('method') !== 'tunai' && ! $request->filled('bank_account_id')),
                 'nullable', 'exists:accounts,code',
             ],
-            'category' => [Rule::requiredIf(! $draft), 'nullable', 'in:' . implode(',', array_keys(Penerimaan::CATEGORIES))],
+            // Dari MASTER, bukan konstanta: kategori yang baru ditambah admin
+            // harus langsung bisa dipakai. Pelajaran dari CHECK constraint
+            // pembayaran_category_check yang dulu memblokir kategori baru.
+            'category' => [
+                Rule::requiredIf(! $draft), 'nullable',
+                Rule::exists('transaction_categories', 'code')
+                    ->where('type', \App\Models\TransactionCategory::TYPE_PENERIMAAN)
+                    ->where('active', true),
+            ],
             'name' => [
                 'sometimes', 'nullable', 'string', 'max:255',
                 // Nama Penerimaan harus terdaftar di master, sesuai kategorinya.
@@ -152,21 +200,32 @@ class PenerimaanController extends Controller
                 ?? \App\Models\Entity::query()->value('id');
         }
         if (empty($data['destination_account_code'])) {
-            $data['destination_account_code'] = '1115'; // Kas Penerimaan Langsung — hanya tercapai saat method tunai
+            $data['destination_account_code'] = self::AKUN_KAS_PENERIMAAN; // hanya tercapai saat method tunai
         }
 
         PeriodLockService::guard($data['entity_id'], $data['date'], 'date');
 
-        if (empty($data['credit_account_code'])) {
-            // Akun pendapatan mengikuti kanal × pembatasan: 41x0 KM,
-            // 42x0 transfer, 43x0 tunai; suspense tetap 2310.
-            $data['credit_account_code'] = Penerimaan::creditCodeFor($data['category'], $data['method']);
+        // Draft boleh belum berkategori; akun kreditnya ditentukan nanti,
+        // saat kategorinya diisi. Tanpa penjagaan ini, CATEGORIES[null]
+        // dibaca dan hasilnya null — akun kredit kosong tanpa ada yang tahu.
+        if (empty($data['credit_account_code']) && ! empty($data['category'])) {
+            $data['credit_account_code'] = $this->akunKredit(
+                $data['category'],
+                $data['name'] ?? null,
+                $data['method'],
+            );
         }
-        if ($data['destination_account_code'] === $data['credit_account_code']) {
+        if (! empty($data['credit_account_code'])
+            && $data['destination_account_code'] === $data['credit_account_code']) {
             return response()->json([
                 'message' => 'Destination account dan credit account tidak boleh sama.',
             ], 422);
         }
+
+        // "Diterima oleh" diisi dari akun yang login, bukan dari isian bebas
+        // (FV-45). Dulu field ini bisa diketik apa saja, jadi nama di layar
+        // belum tentu orang yang benar-benar menerima dananya.
+        $data['received_by'] = $request->user()->name;
 
         $penerimaan = Penerimaan::create($data + [
             'code' => $this->nextCode(),
@@ -198,7 +257,8 @@ class PenerimaanController extends Controller
         }
 
         DB::transaction(function () use ($penerimaan, $request) {
-            $desc = "Penerimaan {$penerimaan->code} — " . (Penerimaan::CATEGORIES[$penerimaan->category]['label'] ?? $penerimaan->category);
+            $desc = "Penerimaan {$penerimaan->code} — "
+                . (\App\Models\TransactionCategory::labelPenerimaan($penerimaan->category) ?? $penerimaan->category);
 
             $journal = JournalEntry::create([
                 'entity_id' => $penerimaan->entity_id,
@@ -278,8 +338,14 @@ class PenerimaanController extends Controller
 
         // Kanal mengikuti penerimaan asal (suspense umumnya transfer bank →
         // reklasifikasi ke 4210/4220 sesuai spec ISAK 35 v2).
-        $creditCode = Penerimaan::creditCodeFor($data['category'], $penerimaan->method);
-        $label = Penerimaan::CATEGORIES[$data['category']]['label'];
+        $creditCode = $this->akunKredit($data['category'], $data['name'] ?? null, $penerimaan->method);
+        $label = \App\Models\TransactionCategory::labelPenerimaan($data['category']) ?? $data['category'];
+        if (! $creditCode) {
+            return response()->json([
+                'message' => "Kategori {$label} belum punya akun pendapatan. "
+                    . 'Isi akun bawaannya di Master Penerimaan dulu.',
+            ], 422);
+        }
 
         $journal = DB::transaction(function () use ($penerimaan, $request, $data, $entryDate, $creditCode, $label) {
             $desc = "Reklasifikasi {$penerimaan->code} — suspense 2310 → {$label}";
@@ -384,6 +450,7 @@ class PenerimaanController extends Controller
     public function update(Request $request, Penerimaan $penerimaan): JsonResponse
     {
         ViharaScopeService::guardRecord($request, $penerimaan->vihara_id);
+        $this->guardPemilikDraft($request, $penerimaan, 'penerimaan');
 
         if (! in_array($penerimaan->status, ['draft', 'rejected'], true)) {
             return response()->json([
@@ -393,15 +460,42 @@ class PenerimaanController extends Controller
 
         $data = $request->validate([
             'date' => ['sometimes', 'date'],
+            'method' => ['sometimes', 'in:transfer,tunai,auto_credit'],
             'bank_account_id' => ['sometimes', 'nullable', 'integer', 'exists:vihara_bank_accounts,id'],
-            'category' => ['sometimes', 'nullable', 'in:' . implode(',', array_keys(Penerimaan::CATEGORIES))],
+            'category' => [
+                'sometimes', 'nullable',
+                Rule::exists('transaction_categories', 'code')
+                    ->where('type', \App\Models\TransactionCategory::TYPE_PENERIMAAN)
+                    ->where('active', true),
+            ],
             'name' => ['sometimes', 'nullable', 'string', 'max:255'],
             'source_name' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'received_by' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'source_payee_id' => ['sometimes', 'nullable', 'integer', 'exists:payees,id'],
             'reference' => ['sometimes', 'nullable', 'string', 'max:100'],
             'amount' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'description' => ['sometimes', 'nullable', 'string'],
         ]);
+
+        // received_by sengaja TIDAK bisa diubah: isinya akun pencatat, bukan
+        // isian bebas (FV-45).
+
+        // Nama Penerimaan harus terdaftar di master dan berlaku untuk vihara
+        // baris ini — aturan yang sama dengan store().
+        if (! empty($data['name'])) {
+            $kategori = $data['category'] ?? $penerimaan->category;
+            $adaDiMaster = \App\Models\TransactionName::query()
+                ->where('type', 'penerimaan')
+                ->where('name', $data['name'])
+                ->when($kategori, fn ($q) => $q->where('category', $kategori))
+                ->exists();
+            if (! $adaDiMaster
+                || ! \App\Models\TransactionName::usableForVihara('penerimaan', $data['name'], (int) $penerimaan->vihara_id)) {
+                return response()->json([
+                    'message' => "Nama Penerimaan '{$data['name']}' tidak berlaku untuk vihara ini.",
+                    'errors' => ['name' => ["Nama Penerimaan '{$data['name']}' tidak berlaku untuk vihara ini."]],
+                ], 422);
+            }
+        }
 
         if (! empty($data['bank_account_id'])) {
             $rek = \App\Models\ViharaBankAccount::find($data['bank_account_id']);
@@ -410,8 +504,31 @@ class PenerimaanController extends Controller
             }
             $data['destination_account_code'] = $rek->coa_account_code;
         }
-        if (! empty($data['category'])) {
-            $data['credit_account_code'] = Penerimaan::CATEGORIES[$data['category']]['default_credit'];
+        // Metode tunai tidak punya rekening: tujuannya Kas Penerimaan
+        // Langsung, sama seperti di store().
+        if (($data['method'] ?? $penerimaan->method) === 'tunai'
+            && array_key_exists('bank_account_id', $data) && empty($data['bank_account_id'])) {
+            $data['destination_account_code'] = self::AKUN_KAS_PENERIMAAN;
+        }
+
+        // Akun kredit ditentukan ulang setiap kategori ATAU metode berubah.
+        //
+        // Yang lama membaca CATEGORIES[...]['default_credit'] langsung —
+        // padahal kunci itu hanya ada pada 'donasi_belum_teridentifikasi'.
+        // Mengubah kategori draft ke salah satu dari empat kategori dana
+        // karenanya menulis NULL ke credit_account_code, dan barisnya gagal
+        // diposting dengan keluhan kelengkapan yang membingungkan. Sekarang
+        // dipakai akunKredit(), yang juga menghormati COA di master nama
+        // penerimaan (FV-45 poin 5).
+        if (! empty($data['category']) || array_key_exists('method', $data)) {
+            $kategori = $data['category'] ?? $penerimaan->category;
+            if ($kategori) {
+                $data['credit_account_code'] = $this->akunKredit(
+                    $kategori,
+                    $data['name'] ?? $penerimaan->name,
+                    $data['method'] ?? $penerimaan->method,
+                );
+            }
         }
 
         $penerimaan->fill($data)->save();
@@ -436,12 +553,13 @@ class PenerimaanController extends Controller
         // menghapus draft vihara lain hanya dengan menebak id.
         ViharaScopeService::guardRecord($request, $penerimaan->vihara_id);
 
-        // Pencatat boleh membuang draftnya sendiri; penyetuju boleh
-        // menolak draft orang lain. Keduanya hanya draft.
+        // Pencatat membuang draftnya SENDIRI — lihat alasannya di
+        // PembayaranController::destroy (FV-44 poin 5).
         $u = $request->user();
-        if (! $u->can('penerimaan.create') && ! $u->can('penerimaan.approve')) {
+        if (! $u->can('penerimaan.create') && ! $u->hasRole('superadmin')) {
             abort(403, 'Anda tidak berhak menghapus draft penerimaan.');
         }
+        $this->guardPemilikDraft($request, $penerimaan, 'penerimaan');
 
         if ($penerimaan->status !== 'draft') {
             return response()->json(['message' => 'Hanya penerimaan draft yang bisa dihapus.'], 422);
@@ -488,24 +606,40 @@ class PenerimaanController extends Controller
         return Storage::disk('local')->response($penerimaan->attachment_path);
     }
 
+    /**
+     * Kategori Dana untuk dropdown — dari MASTER (FV-45 poin 5), dengan
+     * metadata ISAK 35 (restriction) dari konstanta bila kodenya dikenal.
+     *
+     * Kategori buatan admin tidak punya pembatasan bawaan; akun pendapatannya
+     * harus disebut di master, dan itulah yang dikirim di `default_credit`.
+     */
     public function categories(): JsonResponse
     {
+        $master = \App\Models\TransactionCategory::query()
+            ->where('type', \App\Models\TransactionCategory::TYPE_PENERIMAAN)
+            ->where('active', true)
+            ->orderBy('name')
+            ->get(['code', 'name', 'default_debit_code']);
+
         $rows = [];
-        foreach (Penerimaan::CATEGORIES as $key => $meta) {
+        foreach ($master as $c) {
+            $meta = Penerimaan::CATEGORIES[$c->code] ?? null;
+            $bawaan = $c->default_debit_code;
             $rows[] = [
-                'key' => $key,
-                'label' => $meta['label'],
-                'restriction' => $meta['restriction'],
+                'key' => $c->code,
+                'label' => $c->name,
+                'restriction' => $meta['restriction'] ?? null,
                 // Akun kredit final tergantung kanal — kirim per method
                 // supaya frontend bisa menampilkan akun sesuai pilihan.
-                'default_credit' => Penerimaan::creditCodeFor($key, 'transfer'),
+                'default_credit' => $bawaan ?: Penerimaan::creditCodeFor($c->code, 'transfer'),
                 'credit_by_method' => [
-                    'auto_credit' => Penerimaan::creditCodeFor($key, 'auto_credit'),
-                    'transfer' => Penerimaan::creditCodeFor($key, 'transfer'),
-                    'tunai' => Penerimaan::creditCodeFor($key, 'tunai'),
+                    'auto_credit' => $bawaan ?: Penerimaan::creditCodeFor($c->code, 'auto_credit'),
+                    'transfer' => $bawaan ?: Penerimaan::creditCodeFor($c->code, 'transfer'),
+                    'tunai' => $bawaan ?: Penerimaan::creditCodeFor($c->code, 'tunai'),
                 ],
             ];
         }
+
         return response()->json($rows);
     }
 

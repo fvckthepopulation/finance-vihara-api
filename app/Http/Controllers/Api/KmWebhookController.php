@@ -92,7 +92,8 @@ class KmWebhookController extends Controller
         $donation = DB::transaction(function () use ($data, $vihara, $entityId, $rawName, $nameMatched, $paidAt, $bookDate) {
             $creditCode = Penerimaan::creditCodeFor($data['category'], 'auto_credit');
             $donorLabel = $data['donor_name'] ?? 'Anonim';
-            $nameLabel = $rawName ?? Penerimaan::CATEGORIES[$data['category']]['label'];
+            $nameLabel = $rawName
+                ?? (Penerimaan::CATEGORIES[$data['category']]['label'] ?? $data['category']);
             $description = "KalyanaMitta | {$nameLabel} | {$donorLabel} | Paid";
 
             // Penerimaan auto_credit ke 1160 PG Clearing — alur yang sama

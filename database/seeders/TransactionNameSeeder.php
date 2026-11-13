@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\TransactionCategory;
 use App\Models\TransactionName;
 use App\Models\Vihara;
 use Illuminate\Database\Seeder;
@@ -107,10 +108,26 @@ class TransactionNameSeeder extends Seeder
         // baru lahir tanpa pembatasan per vihara sama sekali.
         $viharaIdByCode = Vihara::query()->pluck('id', 'code');
 
+        // Akun bawaan kategori — alasannya persis sama dengan paragraf di
+        // atas. Migrasi 2026_11_13_110100 mengisi coa_account_code tiap Nama
+        // Pengeluaran dari akun bawaan kategorinya, tapi di instalasi baru
+        // tabelnya masih kosong saat migrasi itu jalan. Tanpa bagian ini,
+        // seluruh Nama Pengeluaran lahir tanpa akun, dan jurnalnya jatuh ke
+        // cadangan kategori — bukan akun nama seperti yang diminta FV-29.
+        //
+        // Penerimaan sengaja DIBIARKAN kosong: akun pendapatannya diturunkan
+        // dari kanal × pembatasan ISAK 35, dan mengisinya di sini justru
+        // memakukan akun yang seharusnya mengikuti metode penerimaan
+        // (lihat MasterPenerimaanController).
+        $akunBawaan = TransactionCategory::query()
+            ->where('type', TransactionCategory::TYPE_PENGELUARAN)
+            ->pluck('default_debit_code', 'code');
+
         foreach (self::NAMES as $type => $categories) {
             foreach ($categories as $category => $names) {
                 foreach ($names as $name) {
-                    TransactionName::updateOrCreate(
+                    $akun = $type === 'pengeluaran' ? ($akunBawaan[$category] ?? null) : null;
+                    $baris = TransactionName::updateOrCreate(
                         ['type' => $type, 'name' => $name],
                         [
                             'category' => $category,
@@ -118,6 +135,11 @@ class TransactionNameSeeder extends Seeder
                             'vihara_id' => self::viharaFor($name, $viharaIdByCode),
                         ],
                     );
+                    // Hanya mengisi yang masih kosong: akun yang sudah
+                    // disetel admin di Master Pengeluaran tidak ditimpa.
+                    if ($akun !== null && $baris->coa_account_code === null) {
+                        $baris->update(['coa_account_code' => $akun]);
+                    }
                 }
             }
         }

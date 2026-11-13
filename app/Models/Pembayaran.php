@@ -77,6 +77,12 @@ class Pembayaran extends Model
         return $this->belongsTo(Account::class, 'debit_account_code', 'code');
     }
 
+    /** Pembuat baris — yang berhak melanjutkan draftnya (FV-44). */
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
     public function submittedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'submitted_by_user_id');

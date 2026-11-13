@@ -64,9 +64,32 @@ class TransactionCategory extends Model
     /** Peta kode → label untuk kategori pengeluaran yang masih dipakai. */
     public static function labelsPengeluaran(): array
     {
+        return static::labels(self::TYPE_PENGELUARAN);
+    }
+
+    /** Peta kode → label satu jenis master ('pengeluaran' | 'penerimaan'). */
+    public static function labels(string $type): array
+    {
         return static::query()
-            ->where('type', self::TYPE_PENGELUARAN)
+            ->where('type', $type)
             ->pluck('name', 'code')
             ->all();
+    }
+
+    /**
+     * Label satu kategori penerimaan menurut master, dengan cadangan ke
+     * konstanta lama (Penerimaan::CATEGORIES) supaya baris lama tetap
+     * terbaca walau kategorinya sudah dihapus dari master.
+     */
+    public static function labelPenerimaan(?string $code): ?string
+    {
+        if ($code === null || $code === '') {
+            return null;
+        }
+
+        static $cache = null;
+        $cache ??= static::labels(self::TYPE_PENERIMAAN);
+
+        return $cache[$code] ?? (Penerimaan::CATEGORIES[$code]['label'] ?? null);
     }
 }

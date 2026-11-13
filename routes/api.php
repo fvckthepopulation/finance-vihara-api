@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\EntityController;
 use App\Http\Controllers\Api\KmReportController;
 use App\Http\Controllers\Api\KasBankController;
 use App\Http\Controllers\Api\ManualJournalController;
+use App\Http\Controllers\Api\MasterPenerimaanController;
 use App\Http\Controllers\Api\MasterPengeluaranController;
 use App\Http\Controllers\Api\PenerimaMasterController;
 use App\Http\Controllers\Api\MasterAccountController;
@@ -113,6 +114,22 @@ Route::middleware(['auth:sanctum', 'user.aktif'])->group(function () {
         Route::delete('/master-pengeluaran/nama/{nama}', [MasterPengeluaranController::class, 'namaDestroy']);
     });
 
+    // Master Penerimaan (FV-45) — Kategori Dana + Nama Penerimaan. Bentuknya
+    // kembar dengan Master Pengeluaran; controllernya pun turunannya.
+    Route::middleware('can:masters.view')->group(function () {
+        Route::get('/master-penerimaan/kategori', [MasterPenerimaanController::class, 'kategoriIndex']);
+        Route::get('/master-penerimaan/nama', [MasterPenerimaanController::class, 'namaIndex']);
+        Route::get('/master-penerimaan/akun-pendapatan', [MasterPenerimaanController::class, 'akunBeban']);
+    });
+    Route::middleware('can:masters.manage')->group(function () {
+        Route::post('/master-penerimaan/kategori', [MasterPenerimaanController::class, 'kategoriStore']);
+        Route::patch('/master-penerimaan/kategori/{kategori}', [MasterPenerimaanController::class, 'kategoriUpdate']);
+        Route::delete('/master-penerimaan/kategori/{kategori}', [MasterPenerimaanController::class, 'kategoriDestroy']);
+        Route::post('/master-penerimaan/nama', [MasterPenerimaanController::class, 'namaStore']);
+        Route::patch('/master-penerimaan/nama/{nama}', [MasterPenerimaanController::class, 'namaUpdate']);
+        Route::delete('/master-penerimaan/nama/{nama}', [MasterPenerimaanController::class, 'namaDestroy']);
+    });
+
     // Master PIC kas kecil per vihara (CRUD admin).
     Route::middleware('can:masters.manage')->group(function () {
         Route::post('/viharas/{vihara}/petty-cash-pics', [PettyCashPicController::class, 'store']);
@@ -134,6 +151,9 @@ Route::middleware(['auth:sanctum', 'user.aktif'])->group(function () {
     // untuk role semacam itu — dan itu benar-benar terjadi di suite e2e.
     Route::get('/approvals', [TransactionController::class, 'index'])
         ->middleware('permission:transaksi.view|pembayaran.approve|penerimaan.approve');
+    // Daftar per modul (FV-38): izinnya per modul, bukan transaksi.view.
+    Route::get('/daftar-transaksi', [TransactionController::class, 'daftar'])
+        ->middleware('permission:transaksi.view|pembayaran.view|penerimaan.view');
     Route::get('/transactions/export', [TransactionController::class, 'export'])->middleware('can:reports.export');
 
     // Penerimaan Dana Umat — rekap penerimaan posted per kategori dana.

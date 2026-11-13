@@ -22,17 +22,45 @@ use Illuminate\Validation\ValidationException;
  *      adanya, jadi baris lama tetap terbaca walau masternya berubah.
  *   2. Akun beban di tingkat Nama Pengeluaran adalah yang dipakai jurnal.
  *      Kalau kosong, dipakai akun bawaan kategorinya.
+ *
+ * Sejak FV-45 kelas ini juga menjadi dasar Master Penerimaan: bentuk masternya
+ * identik (kategori → nama → akun COA), yang berbeda hanya JENIS transaksinya,
+ * jenis akun yang sah, dan tabel yang diperiksa saat menentukan "sudah
+ * dipakai". Ketiganya konstanta di bawah, dibaca lewat `static::` supaya
+ * turunan hanya perlu menimpanya — bukan menyalin 350 baris aturan yang sama
+ * dan membiarkan keduanya menyimpang.
  */
 class MasterPengeluaranController extends Controller
 {
-    private const TIPE = 'pengeluaran';
+    /** 'pengeluaran' | 'penerimaan' — nilai kolom type di kedua tabel master. */
+    protected const TIPE = 'pengeluaran';
+
+    /** Model transaksi yang menentukan apakah kategori/nama sudah terpakai. */
+    protected const MODEL = Pembayaran::class;
+
+    /** Jenis akun COA yang sah untuk nama di master ini. */
+    protected const JENIS_AKUN = 'expense';
+
+    /** Sebutan di pesan kesalahan: "Nama pengeluaran sudah ada…". */
+    protected const SEBUTAN = 'pengeluaran';
+
+    /** Sebutan akun di pesan validasi. */
+    protected const SEBUTAN_AKUN = 'akun jenis beban';
+
+    /**
+     * Apakah akun COA wajib diisi saat menambah nama?
+     *
+     * Wajib untuk pengeluaran: akun debit jurnal memang diambil dari sini.
+     * Tidak wajib untuk penerimaan — lihat MasterPenerimaanController.
+     */
+    protected const AKUN_WAJIB = true;
 
     // ── Kategori Biaya ─────────────────────────────────────────────────────
 
     public function kategoriIndex(Request $request): JsonResponse
     {
         $q = TransactionCategory::query()
-            ->where('type', TransactionCategory::TYPE_PENGELUARAN)
+            ->where('type', static::TIPE)
             ->orderBy('name');
 
         if ($search = $request->string('q')->toString()) {
@@ -71,7 +99,7 @@ class MasterPengeluaranController extends Controller
             'code' => [
                 'required', 'string', 'max:48', 'regex:/^[a-z0-9_]+$/',
                 Rule::unique('transaction_categories', 'code')
-                    ->where('type', TransactionCategory::TYPE_PENGELUARAN),
+                    ->where('type', static::TIPE),
             ],
             'name' => ['required', 'string', 'max:255'],
             'description' => ['sometimes', 'nullable', 'string', 'max:1000'],
@@ -83,7 +111,7 @@ class MasterPengeluaranController extends Controller
         ]);
 
         $kategori = TransactionCategory::create($data + [
-            'type' => TransactionCategory::TYPE_PENGELUARAN,
+            'type' => static::TIPE,
         ]);
 
         return response()->json($kategori, 201);
@@ -91,7 +119,7 @@ class MasterPengeluaranController extends Controller
 
     public function kategoriUpdate(Request $request, TransactionCategory $kategori): JsonResponse
     {
-        $this->pastikanPengeluaran($kategori);
+        $this->pastikanJenisBenar($kategori);
 
         $data = $request->validate([
             // `code` tidak boleh diubah: kolom pembayaran.category menyimpan
@@ -109,15 +137,15 @@ class MasterPengeluaranController extends Controller
             $aktif = $this->jumlahNama($kategori->code, true);
             if ($aktif > 0 && ! $request->boolean('nonaktifkan_anak')) {
                 return response()->json([
-                    'message' => "Kategori masih punya {$aktif} Nama Pengeluaran aktif. "
-                        . 'Nonaktifkan nama-nama itu dulu, atau kirim nonaktifkan_anak=true '
-                        . 'untuk menonaktifkan semuanya sekaligus.',
+                    'message' => "Kategori masih punya {$aktif} Nama " . ucfirst(static::SEBUTAN)
+                        . ' aktif. Nonaktifkan nama-nama itu dulu, atau kirim '
+                        . 'nonaktifkan_anak=true untuk menonaktifkan semuanya sekaligus.',
                     'jumlah_nama_aktif' => $aktif,
                 ], 422);
             }
             if ($aktif > 0) {
                 TransactionName::query()
-                    ->where('type', self::TIPE)
+                    ->where('type', static::TIPE)
                     ->where('category', $kategori->code)
                     ->update(['active' => false]);
             }
@@ -130,7 +158,7 @@ class MasterPengeluaranController extends Controller
 
     public function kategoriDestroy(TransactionCategory $kategori): JsonResponse
     {
-        $this->pastikanPengeluaran($kategori);
+        $this->pastikanJenisBenar($kategori);
 
         if ($this->kategoriDipakai($kategori->code)) {
             return response()->json([
@@ -139,7 +167,8 @@ class MasterPengeluaranController extends Controller
         }
         if ($this->jumlahNama($kategori->code, null) > 0) {
             return response()->json([
-                'message' => 'Kategori masih punya Nama Pengeluaran. Hapus atau pindahkan dulu nama-namanya.',
+                'message' => 'Kategori masih punya Nama ' . ucfirst(static::SEBUTAN)
+                    . '. Hapus atau pindahkan dulu nama-namanya.',
             ], 422);
         }
 
@@ -154,7 +183,7 @@ class MasterPengeluaranController extends Controller
     {
         $q = TransactionName::query()
             ->with(['coaAccount:code,name', 'vihara:id,name'])
-            ->where('type', self::TIPE)
+            ->where('type', static::TIPE)
             ->orderBy('category')
             ->orderByRaw('LOWER(name)');
 
@@ -176,7 +205,7 @@ class MasterPengeluaranController extends Controller
         $perPage = min(max((int) $request->integer('per_page', 20), 1), 100);
         $halaman = $q->paginate($perPage);
 
-        $label = TransactionCategory::labelsPengeluaran();
+        $label = TransactionCategory::labels(static::TIPE);
         $halaman->getCollection()->transform(fn (TransactionName $n) => [
             'id' => $n->id,
             'code' => $n->code,
@@ -199,14 +228,14 @@ class MasterPengeluaranController extends Controller
     {
         $data = $this->validasiNama($request, null);
 
-        $nama = TransactionName::create($data + ['type' => self::TIPE]);
+        $nama = TransactionName::create($data + ['type' => static::TIPE]);
 
         return response()->json($nama, 201);
     }
 
     public function namaUpdate(Request $request, TransactionName $nama): JsonResponse
     {
-        abort_unless($nama->type === self::TIPE, 404);
+        abort_unless($nama->type === static::TIPE, 404);
 
         $nama->update($this->validasiNama($request, $nama));
 
@@ -215,11 +244,12 @@ class MasterPengeluaranController extends Controller
 
     public function namaDestroy(TransactionName $nama): JsonResponse
     {
-        abort_unless($nama->type === self::TIPE, 404);
+        abort_unless($nama->type === static::TIPE, 404);
 
         if ($this->namaDipakai($nama->name)) {
             return response()->json([
-                'message' => 'Nama pengeluaran sudah dipakai transaksi — tidak bisa dihapus. Nonaktifkan saja.',
+                'message' => 'Nama ' . static::SEBUTAN
+                    . ' sudah dipakai transaksi — tidak bisa dihapus. Nonaktifkan saja.',
             ], 422);
         }
 
@@ -230,7 +260,7 @@ class MasterPengeluaranController extends Controller
 
     // ── Bantuan ────────────────────────────────────────────────────────────
 
-    private function validasiNama(Request $request, ?TransactionName $existing): array
+    protected function validasiNama(Request $request, ?TransactionName $existing): array
     {
         $baru = $existing === null;
 
@@ -238,12 +268,13 @@ class MasterPengeluaranController extends Controller
             'category' => [
                 $baru ? 'required' : 'sometimes',
                 Rule::exists('transaction_categories', 'code')
-                    ->where('type', TransactionCategory::TYPE_PENGELUARAN),
+                    ->where('type', static::TIPE),
             ],
             'name' => [$baru ? 'required' : 'sometimes', 'string', 'max:255'],
             'code' => ['sometimes', 'nullable', 'string', 'max:48'],
             'coa_account_code' => [
-                $baru ? 'required' : 'sometimes',
+                $baru && static::AKUN_WAJIB ? 'required' : 'sometimes',
+                'nullable',
                 'string',
                 'exists:accounts,code',
             ],
@@ -251,7 +282,7 @@ class MasterPengeluaranController extends Controller
             'vihara_id' => ['sometimes', 'nullable', 'integer', 'exists:viharas,id'],
             'active' => ['sometimes', 'boolean'],
         ], [
-            'coa_account_code.exists' => 'Akun biaya harus akun jenis beban.',
+            'coa_account_code.exists' => 'Akun harus ' . static::SEBUTAN_AKUN . '.',
         ]);
 
         $kategori = $data['category'] ?? $existing?->category;
@@ -261,7 +292,7 @@ class MasterPengeluaranController extends Controller
             : $existing?->vihara_id;
 
         $kembar = TransactionName::query()
-            ->where('type', self::TIPE)
+            ->where('type', static::TIPE)
             ->where('category', $kategori)
             ->whereRaw('LOWER(name) = ?', [mb_strtolower((string) $nama)])
             ->when($viharaId === null, fn ($q) => $q->whereNull('vihara_id'))
@@ -271,7 +302,7 @@ class MasterPengeluaranController extends Controller
 
         if ($kembar) {
             throw ValidationException::withMessages([
-                'name' => 'Nama pengeluaran sudah ada di kategori ini.',
+                'name' => 'Nama ' . static::SEBUTAN . ' sudah ada di kategori ini.',
             ]);
         }
 
@@ -282,14 +313,14 @@ class MasterPengeluaranController extends Controller
         $akun = $data['coa_account_code'] ?? $existing?->coa_account_code;
         if ($akun !== null) {
             $bawaanKategori = TransactionCategory::query()
-                ->where('type', TransactionCategory::TYPE_PENGELUARAN)
+                ->where('type', static::TIPE)
                 ->where('code', $kategori)
                 ->value('default_debit_code');
             $jenis = Account::query()->where('code', $akun)->value('type');
-            if ($jenis !== 'expense' && $akun !== $bawaanKategori) {
+            if ($jenis !== static::JENIS_AKUN && $akun !== $bawaanKategori) {
                 throw ValidationException::withMessages([
-                    'coa_account_code' => 'Akun biaya harus akun jenis beban '
-                        . '(atau akun bawaan kategori ini).',
+                    'coa_account_code' => 'Akun harus ' . static::SEBUTAN_AKUN
+                        . ' (atau akun bawaan kategori ini).',
                 ]);
             }
         }
@@ -305,7 +336,7 @@ class MasterPengeluaranController extends Controller
     public function akunBeban(Request $request): JsonResponse
     {
         $bawaan = TransactionCategory::query()
-            ->where('type', TransactionCategory::TYPE_PENGELUARAN)
+            ->where('type', static::TIPE)
             ->when(
                 $request->filled('category'),
                 fn ($q) => $q->where('code', $request->string('category')->toString()),
@@ -319,33 +350,34 @@ class MasterPengeluaranController extends Controller
             'data' => Account::query()
                 ->where('active', true)
                 ->where('is_header', false)
-                ->where(fn ($q) => $q->where('type', 'expense')->orWhereIn('code', $bawaan))
+                ->where(fn ($q) => $q->where('type', static::JENIS_AKUN)->orWhereIn('code', $bawaan))
                 ->orderBy('code')
                 ->get(['code', 'name', 'type']),
         ]);
     }
 
-    private function jumlahNama(string $kategori, ?bool $aktif): int
+    protected function jumlahNama(string $kategori, ?bool $aktif): int
     {
         return TransactionName::query()
-            ->where('type', self::TIPE)
+            ->where('type', static::TIPE)
             ->where('category', $kategori)
             ->when($aktif !== null, fn ($q) => $q->where('active', $aktif))
             ->count();
     }
 
-    private function kategoriDipakai(string $kategori): bool
+    protected function kategoriDipakai(string $kategori): bool
     {
-        return Pembayaran::query()->where('category', $kategori)->exists();
+        return (static::MODEL)::query()->where('category', $kategori)->exists();
     }
 
-    private function namaDipakai(?string $nama): bool
+    protected function namaDipakai(?string $nama): bool
     {
-        return $nama !== null && Pembayaran::query()->where('name', $nama)->exists();
+        return $nama !== null && (static::MODEL)::query()->where('name', $nama)->exists();
     }
 
-    private function pastikanPengeluaran(TransactionCategory $kategori): void
+    /** Kategori dari jenis master LAIN tidak ada di sini — 404, bukan 403. */
+    protected function pastikanJenisBenar(TransactionCategory $kategori): void
     {
-        abort_unless($kategori->type === TransactionCategory::TYPE_PENGELUARAN, 404);
+        abort_unless($kategori->type === static::TIPE, 404);
     }
 }

@@ -21,7 +21,10 @@ return [
 
     'allowed_headers' => ['*'],
 
-    'exposed_headers' => [],
+    // Nama berkas unduhan dibaca peramban dari header ini. Tanpa
+    // diekspos, permintaan lintas asal (web 3500 → API 8500) tidak bisa
+    // membacanya dan unduhan jatuh ke nama bawaan (FV-59).
+    'exposed_headers' => ['Content-Disposition'],
 
     'max_age' => 0,
 

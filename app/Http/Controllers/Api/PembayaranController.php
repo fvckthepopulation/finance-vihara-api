@@ -160,6 +160,13 @@ class PembayaranController extends Controller
             $data['source_account_code'] = $bankAccount->coa_account_code;
         }
 
+        if ($pesan = $this->cekAkunBank($data['category'] ?? null, $data['bank_account_id'] ?? null)) {
+            return response()->json([
+                'message' => $pesan,
+                'errors' => ['bank_account_id' => [$pesan]],
+            ], 422);
+        }
+
         // Yayasan MENGIKUTI vihara transaksi, bukan yayasan si pengguna.
         // Tanpa ini, admin lintas yayasan yang mencatat untuk vihara di
         // yayasan lain menyimpan baris ber-entity_id miliknya sendiri — dan
@@ -216,6 +223,57 @@ class PembayaranController extends Controller
         );
     }
 
+    /**
+     * Rekening sumber harus sesuai aturan akun bank kategorinya (FV-56).
+     *
+     * Dijaga di server, bukan cuma dengan menyembunyikan pilihan di form:
+     * request yang dikirim langsung pun ditolak, kalau tidak jurnal bisa
+     * mengkredit akun bank yang salah dan Laporan Posisi Keuangan ikut salah
+     * tanpa ada yang tahu.
+     *
+     * @return string|null pesan kesalahan, null kalau sesuai
+     */
+    private function cekAkunBank(?string $kategori, ?int $bankAccountId): ?string
+    {
+        $akunWajib = TransactionCategory::akunBankUntuk($kategori);
+        if ($akunWajib === null || $bankAccountId === null) {
+            return null;
+        }
+
+        $rek = \App\Models\ViharaBankAccount::find($bankAccountId);
+        if ($rek === null || $rek->coa_account_code === $akunWajib) {
+            return null;
+        }
+
+        $namaAkun = \App\Models\Account::where('code', $akunWajib)->value('name') ?? $akunWajib;
+        $labelKategori = TransactionCategory::labelPengeluaran($kategori) ?? $kategori;
+
+        return "{$labelKategori} harus dibayar dari rekening {$namaAkun} ({$akunWajib}). "
+            . 'Rekening yang dipilih memakai akun '
+            . ($rek->coa_account_code ?? 'kosong').'.';
+    }
+
+    /**
+     * Deskripsi jurnal sebuah pengeluaran (FV-51).
+     *
+     * Susunannya mengikuti yang sudah tampil di DAFTAR jurnal, supaya detail
+     * dan daftar menyebut hal yang sama: nama pengeluaran, lalu penerima dan
+     * no. bukti, lalu nomor transaksi dan kategorinya.
+     */
+    private function deskripsiJurnal(Pembayaran $pembayaran): string
+    {
+        $kategori = TransactionCategory::labelPengeluaran($pembayaran->category)
+            ?? $pembayaran->category;
+
+        $bagian = array_values(array_filter([
+            $pembayaran->name,
+            implode(' · ', array_filter([$pembayaran->payee_name, $pembayaran->reference])) ?: null,
+            "Pembayaran {$pembayaran->code} — {$kategori}",
+        ]));
+
+        return implode(' — ', $bagian);
+    }
+
     public function post(Request $request, Pembayaran $pembayaran): JsonResponse
     {
         ViharaScopeService::guardRecord($request, $pembayaran->vihara_id);
@@ -238,8 +296,9 @@ class PembayaranController extends Controller
         }
 
         DB::transaction(function () use ($pembayaran, $request) {
-            $desc = "Pembayaran {$pembayaran->code} — "
-                . (TransactionCategory::labelPengeluaran($pembayaran->category) ?? $pembayaran->category);
+            // Deskripsi jurnal memuat informasi PEMBEDA, bukan hanya nomor dan
+            // kategori yang sama untuk semua transaksi sejenis (FV-51).
+            $desc = $this->deskripsiJurnal($pembayaran);
 
             $journal = JournalEntry::create([
                 'entity_id' => $pembayaran->entity_id,
@@ -259,15 +318,24 @@ class PembayaranController extends Controller
                 'account_code' => $pembayaran->debit_account_code,
                 'debit' => $pembayaran->amount,
                 'credit' => 0,
-                'description' => $pembayaran->description ?? $desc,
+                // Catatan penginput TIDAK menimpa deskripsi baris: isinya
+                // tetap tersimpan di transaksinya dan ditampilkan terpisah.
+                'description' => $desc,
             ]);
             JournalLine::create([
                 'journal_entry_id' => $journal->id,
                 'account_code' => $pembayaran->source_account_code,
                 'debit' => 0,
                 'credit' => $pembayaran->amount,
-                'description' => $pembayaran->description ?? $desc,
+                // Catatan penginput TIDAK menimpa deskripsi baris: isinya
+                // tetap tersimpan di transaksinya dan ditampilkan terpisah.
+                'description' => $desc,
             ]);
+
+            // Beban yang dibiayai dana terikat melepaskan pembatasannya
+            // (FV-55). Di dalam transaksi yang sama, supaya tidak pernah ada
+            // beban terposting tanpa pelepasannya.
+            \App\Services\PelepasanPembatasanService::untukPembayaran($pembayaran, $request->user());
 
             $pembayaran->update([
                 'status' => 'posted',
@@ -389,6 +457,22 @@ class PembayaranController extends Controller
             }
             $data['source_account_code'] = $rek->coa_account_code;
         }
+
+        // Kategori ATAU rekening bisa berubah di sini, jadi pasangannya
+        // diperiksa ulang terhadap keadaan sesudah perubahan.
+        $pesan = $this->cekAkunBank(
+            $data['category'] ?? $pembayaran->category,
+            array_key_exists('bank_account_id', $data)
+                ? $data['bank_account_id']
+                : $pembayaran->bank_account_id,
+        );
+        if ($pesan) {
+            return response()->json([
+                'message' => $pesan,
+                'errors' => ['bank_account_id' => [$pesan]],
+            ], 422);
+        }
+
         if (! empty($data['category'])) {
             $data['debit_account_code'] = TransactionName::akunDebit(
                 $data['category'],

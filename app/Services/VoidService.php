@@ -65,6 +65,11 @@ class VoidService
         PeriodLockService::guard($record->entity_id, $tanggal, 'date');
 
         return DB::transaction(function () use ($record, $user, $reason, $label, $asal, $tanggal) {
+            // Beban dana terikat: pelepasan pembatasannya ikut dibalik,
+            // kalau tidak aset neto DP kekurangan selamanya (FV-55).
+            if ($record instanceof \App\Models\Pembayaran) {
+                PelepasanPembatasanService::balikkan($record, $user, $reason);
+            }
             $kode = $record->code ?? "JE#{$asal->id}";
             $desc = "Pembalik {$kode} — {$reason}";
 

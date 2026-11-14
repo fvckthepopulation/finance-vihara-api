@@ -10,6 +10,7 @@ use App\Models\PettyCashMovement;
 use App\Models\PettyCashPic;
 use App\Models\ViharaBankAccount;
 use App\Services\PeriodLockService;
+use Illuminate\Validation\Rule;
 use App\Services\ViharaScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -80,6 +81,20 @@ class PettyCashController extends Controller
      * Ringkasan Kas Kecil per PIC: saldo awal (topup posted pertama),
      * total isi/pakai, dan saldo berjalan. Hanya movement posted.
      */
+    /**
+     * Ringkasan kas kecil per PIC (kartu di layar Kas Kecil).
+     *
+     * Angkanya PER BULAN BERJALAN, dan selalu berlaku:
+     *   Saldo Awal + Pengisian − Terpakai = Saldo Saat Ini.
+     *
+     * Dulu saldo_awal diisi nominal topup posted PERTAMA, padahal topup itu
+     * juga ikut dijumlahkan di total pengisian — jadi angkanya dihitung dua
+     * kali dan kartunya tidak pernah bisa dicocokkan (FV-60). Saldo Awal
+     * yang benar adalah saldo PIC itu SEBELUM bulan berjalan.
+     *
+     * Draft dan yang dibatalkan tidak ikut dihitung di keempat angka: hanya
+     * baris berstatus posted yang dijumlahkan.
+     */
     public function summary(Request $request): JsonResponse
     {
         $viharaIds = ViharaScopeService::readFilterIds($request);
@@ -90,7 +105,9 @@ class PettyCashController extends Controller
             ->orderBy('name')
             ->get(['id', 'vihara_id', 'name']);
 
-        $agg = PettyCashMovement::query()
+        $awalBulan = now()->startOfMonth()->toDateString();
+
+        $jumlahkan = fn ($query) => $query
             ->where('status', 'posted')
             ->whereNotNull('pic_id')
             ->selectRaw(
@@ -102,33 +119,41 @@ class PettyCashController extends Controller
             ->get()
             ->keyBy('pic_id');
 
-        // Saldo awal = amount topup posted pertama per PIC (0 kalau belum ada).
-        $firstTopups = PettyCashMovement::query()
-            ->where('status', 'posted')
-            ->where('subtype', 'topup')
-            ->whereNotNull('pic_id')
-            ->orderBy('movement_date')
-            ->orderBy('id')
-            ->get(['pic_id', 'amount'])
-            ->unique('pic_id')
-            ->keyBy('pic_id');
+        // Bulan berjalan — yang ditampilkan sebagai Pengisian dan Terpakai.
+        $bulanIni = $jumlahkan(
+            PettyCashMovement::query()->where('movement_date', '>=', $awalBulan),
+        );
+        // Sebelum bulan berjalan — itulah Saldo Awal.
+        $sebelumnya = $jumlahkan(
+            PettyCashMovement::query()->where('movement_date', '<', $awalBulan),
+        );
 
         $total = 0.0;
-        $rows = $pics->map(function (PettyCashPic $pic) use ($agg, $firstTopups, &$total) {
-            $a = $agg->get($pic->id);
-            $isi = (float) ($a->total_isi ?? 0);
-            $pakai = (float) ($a->total_pakai ?? 0);
-            $saldo = $isi - $pakai;
+        $rows = $pics->map(function (PettyCashPic $pic) use ($bulanIni, $sebelumnya, &$total) {
+            $b = $bulanIni->get($pic->id);
+            $isi = (float) ($b->total_isi ?? 0);
+            $pakai = (float) ($b->total_pakai ?? 0);
+
+            $l = $sebelumnya->get($pic->id);
+            $saldoAwal = (float) ($l->total_isi ?? 0) - (float) ($l->total_pakai ?? 0);
+
+            // Saldo saat ini tetap saldo SEJAK AWAL, supaya tetap cocok
+            // dengan kartu di Kas & Bank dan saldo akun 1110 di jurnal
+            // (FV-60 poin 6) — dan dengan sendirinya sama dengan
+            // saldo awal + pengisian − terpakai.
+            $saldo = $saldoAwal + $isi - $pakai;
             $total += $saldo;
 
             return [
                 'id' => $pic->id,
                 'name' => $pic->name,
-                'saldo_awal' => number_format((float) ($firstTopups->get($pic->id)?->amount ?? 0), 2, '.', ''),
+                'saldo_awal' => number_format($saldoAwal, 2, '.', ''),
                 'saldo' => number_format($saldo, 2, '.', ''),
                 'total_isi' => number_format($isi, 2, '.', ''),
                 'total_pakai' => number_format($pakai, 2, '.', ''),
-                'count' => (int) ($a->cnt ?? 0),
+                'count' => (int) ($b->cnt ?? 0),
+                // Periode yang diwakili keempat angka di atas.
+                'periode' => now()->startOfMonth()->toDateString(),
             ];
         })->values();
 
@@ -165,9 +190,20 @@ class PettyCashController extends Controller
                 'sometimes', 'nullable', 'integer', 'exists:vihara_bank_accounts,id',
                 'prohibited_if:subtype,usage',
             ],
+            // Kategori keperluan WAJIB untuk pemakaian (FV-58): akun beban
+            // jurnalnya diambil dari sini. Tidak berlaku untuk pengisian,
+            // yang hanya memindahkan kas.
+            'category' => [
+                'required_if:subtype,usage',
+                'prohibited_if:subtype,topup',
+                'nullable',
+                Rule::in(array_keys(PettyCashMovement::CATEGORIES)),
+            ],
             'reference' => ['sometimes', 'nullable', 'string', 'max:100'],
             'description' => ['sometimes', 'nullable', 'string'],
             'entity_id' => ['sometimes', 'nullable', 'exists:entities,id'],
+        ], [
+            'category.required_if' => 'Kategori keperluan wajib dipilih.',
         ]);
 
         $viharaId = ViharaScopeService::creationViharaId($request);
@@ -180,10 +216,21 @@ class PettyCashController extends Controller
             ], 422);
         }
 
-        // Penggunaan kas kecil = Beban Lainnya 6300, bukan Biaya Operasional
-        // Vihara 6100: beban kas kecil harus terpisah dari biaya operasional
-        // yang diinput lewat Input Pengeluaran (P-18 di skenario uji).
-        $counterpart = $data['subtype'] === 'usage' ? '6300' : '1115';
+        // Akun beban pemakaian MENGIKUTI KATEGORI keperluannya (FV-58).
+        //
+        // Dulu selalu 6300 Beban Lainnya — keputusan P-18, yang memisahkan
+        // beban kas kecil dari biaya operasional. Akibatnya beban program
+        // (Bhikkhu, Perayaan, Paramita) yang dibayar lewat kas kecil tercatat
+        // sebagai beban administrasi: Laporan Penghasilan Komprehensif tidak
+        // menampilkan beban program yang sebenarnya, dan pelepasan pembatasan
+        // dana terikat (FV-55) tidak punya dasar untuk dihitung.
+        //
+        // Keperluan operasional umum dan "lainnya" tetap mendarat di 6100 dan
+        // 6300, jadi maksud P-18 tetap terjaga untuk beban yang memang
+        // administratif.
+        $counterpart = $data['subtype'] === 'usage'
+            ? (PettyCashMovement::CATEGORIES[$data['category']]['default_counterpart'] ?? '6300')
+            : '1115';
         if (! empty($data['source_bank_account_id'])) {
             $bankAccount = ViharaBankAccount::find($data['source_bank_account_id']);
             if (! $bankAccount->bolehDipakaiVihara((int) $viharaId)) {
@@ -212,6 +259,7 @@ class PettyCashController extends Controller
             'movement_date' => $data['date'],
             'amount' => $data['amount'],
             'counterpart_account_code' => $counterpart,
+            'category' => $data['category'] ?? null,
             'recipient' => $pic->name,
             'reference' => $data['reference'] ?? null,
             'description' => $data['description'] ?? null,

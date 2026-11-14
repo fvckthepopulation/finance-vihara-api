@@ -139,6 +139,33 @@ class DashboardController extends Controller
             $byDana[$dana]['total'] += $total;
         }
 
+        // Pemakaian kas kecil juga BEBAN, dan sudah dijurnal sebagai beban —
+        // tanpa ini Total Pengeluaran di dashboard lebih kecil daripada total
+        // beban di Laporan Penghasilan Komprehensif untuk periode yang sama
+        // (FV-61). Pengisian kas kecil TIDAK dihitung: itu pindah kas, bukan
+        // beban. Draft dan yang dibatalkan juga tidak, karena disaring status.
+        $kasKecil = \App\Models\PettyCashMovement::query()
+            ->where('status', 'posted')
+            ->where('subtype', 'usage')
+            ->whereBetween('movement_date', $range)
+            ->tap(fn ($q) => ViharaScopeService::applyScope($q, $request))
+            ->selectRaw('COUNT(*) as tx_count, COALESCE(SUM(amount), 0) as tx_total')
+            ->first();
+
+        $kasKecilTotal = (float) ($kasKecil->tx_total ?? 0);
+        $kasKecilCount = (int) ($kasKecil->tx_count ?? 0);
+        if ($kasKecilCount > 0) {
+            $keluarTotal += $kasKecilTotal;
+            $keluarCount += $kasKecilCount;
+            // Baris tersendiri, supaya terlihat dari mana angkanya datang
+            // (FV-61 poin 4).
+            $byDana['Kas Kecil'] = [
+                'dana' => 'Kas Kecil',
+                'count' => $kasKecilCount,
+                'total' => $kasKecilTotal,
+            ];
+        }
+
         $byDana = array_values($byDana);
         usort($byDana, fn ($a, $b) => $b['total'] <=> $a['total']);
 

@@ -391,6 +391,105 @@ class ReconciliationController extends Controller
     }
 
     /** Persist preview auto-matcher saat ini. Idempotent. */
+    /**
+     * Tandai satu baris rekening koran sebagai SETORAN KAS TUNAI (FV-52).
+     *
+     * Belum membuat jurnal apa pun: selama rekonsiliasi belum diselesaikan,
+     * penandaan masih bisa diubah atau dibatalkan tanpa meninggalkan jejak di
+     * buku besar (poin 4). Jurnalnya dibuat di complete().
+     */
+    public function tandaiSetoranTunai(
+        Request $request,
+        ReconciliationRun $reconciliation,
+        BankStatementLine $line,
+    ): JsonResponse {
+        ViharaScopeService::guardRecord($request, $reconciliation->vihara_id);
+        $this->assertInProgress($reconciliation);
+        abort_unless($line->reconciliation_run_id === $reconciliation->id, 404);
+
+        $data = $request->validate([
+            'vihara_id' => ['required', 'integer', 'exists:viharas,id'],
+        ]);
+
+        // Vihara asal uang harus dalam jangkauan akses penandanya.
+        ViharaScopeService::guardRecord($request, $data['vihara_id']);
+
+        if ($line->matched_type !== null && $line->matched_type !== BankStatementLine::TIPE_SETORAN_TUNAI) {
+            return response()->json(['message' => 'Baris koran ini sudah dicocokkan ke dokumen lain.'], 422);
+        }
+
+        // Setoran menambah saldo rekening, jadi barisnya harus uang MASUK.
+        $nominal = (float) $line->debit;
+        if ($nominal <= 0) {
+            return response()->json([
+                'message' => 'Hanya baris uang masuk yang bisa ditandai sebagai setoran kas tunai.',
+            ], 422);
+        }
+
+        // Tidak boleh melebihi kas tunai vihara itu (poin 7). Saldo dibaca
+        // dari buku besar, sama dengan yang tampil di Kas & Bank.
+        $saldoTunai = $this->saldoKasTunai((int) $data['vihara_id']);
+        $sudahDitandai = (float) $reconciliation->bankLines()
+            ->where('matched_type', BankStatementLine::TIPE_SETORAN_TUNAI)
+            ->where('setoran_vihara_id', $data['vihara_id'])
+            ->whereKeyNot($line->id)
+            ->sum('debit');
+
+        if ($nominal + $sudahDitandai > $saldoTunai + 0.005) {
+            return response()->json([
+                'message' => 'Setoran melebihi kas tunai vihara itu. Saldo kas tunai '
+                    . number_format($saldoTunai, 0, ',', '.')
+                    . ($sudahDitandai > 0
+                        ? ', dan ' . number_format($sudahDitandai, 0, ',', '.') . ' di antaranya sudah ditandai di baris lain.'
+                        : '.'),
+            ], 422);
+        }
+
+        $line->update([
+            'matched_type' => BankStatementLine::TIPE_SETORAN_TUNAI,
+            'matched_id' => null,
+            'setoran_vihara_id' => $data['vihara_id'],
+            'status' => 'matched',
+        ]);
+
+        return response()->json($line->fresh());
+    }
+
+    /** Batalkan penandaan setoran kas tunai (selama belum diselesaikan). */
+    public function batalkanSetoranTunai(
+        Request $request,
+        ReconciliationRun $reconciliation,
+        BankStatementLine $line,
+    ): JsonResponse {
+        ViharaScopeService::guardRecord($request, $reconciliation->vihara_id);
+        $this->assertInProgress($reconciliation);
+        abort_unless($line->reconciliation_run_id === $reconciliation->id, 404);
+
+        if ($line->matched_type !== BankStatementLine::TIPE_SETORAN_TUNAI) {
+            return response()->json(['message' => 'Baris ini bukan setoran kas tunai.'], 422);
+        }
+
+        $line->update([
+            'matched_type' => null,
+            'setoran_vihara_id' => null,
+            'status' => 'unmatched',
+        ]);
+
+        return response()->json($line->fresh());
+    }
+
+    /** Saldo akun 1115 satu vihara, dari buku besar. */
+    private function saldoKasTunai(int $viharaId): float
+    {
+        return (float) DB::table('journal_lines as jl')
+            ->join('journal_entries as je', 'je.id', '=', 'jl.journal_entry_id')
+            ->where('jl.account_code', '1115')
+            ->where('je.status', 'posted')
+            ->whereNotNull('je.posted_at')
+            ->where('je.vihara_id', $viharaId)
+            ->sum(DB::raw('jl.debit - jl.credit'));
+    }
+
     public function applyMatches(Request $request, ReconciliationRun $reconciliation): JsonResponse
     {
         ViharaScopeService::guardRecord($request, $reconciliation->vihara_id);
@@ -434,6 +533,11 @@ class ReconciliationController extends Controller
             $systemRows,
         ));
 
+        // Jurnal setoran kas tunai dibuat DI SINI, bukan saat ditandai:
+        // selama rekonsiliasi belum selesai, penandaannya masih boleh
+        // berubah (FV-52 poin 5).
+        $this->bukukanSetoranTunai($reconciliation, $request);
+
         $reconciliation->update([
             'status' => 'completed',
             'system_balance' => $systemBalance,
@@ -445,6 +549,78 @@ class ReconciliationController extends Controller
         ]);
 
         return response()->json($this->runArray($reconciliation->fresh()->load('bankAccount')));
+    }
+
+    /**
+     * Buat jurnal setoran untuk tiap baris yang ditandai setoran kas tunai:
+     * Dr akun rekening yang direkonsiliasi / Kr 1115, bertanggal sesuai
+     * rekening koran, dengan vihara asal uangnya.
+     *
+     * Bukan pendapatan — hanya memindahkan uang yang SUDAH diakui saat
+     * penerimaannya diposting.
+     */
+    private function bukukanSetoranTunai(ReconciliationRun $reconciliation, Request $request): void
+    {
+        $baris = $reconciliation->bankLines()
+            ->where('matched_type', BankStatementLine::TIPE_SETORAN_TUNAI)
+            ->whereNull('setoran_journal_entry_id')
+            ->get();
+
+        if ($baris->isEmpty()) {
+            return;
+        }
+
+        $rekening = $reconciliation->bankAccount;
+        $akunBank = $rekening?->coa_account_code;
+        if (! $akunBank) {
+            abort(422, 'Rekening rekonsiliasi belum punya akun COA, jadi setoran tidak bisa dijurnal.');
+        }
+
+        DB::transaction(function () use ($baris, $reconciliation, $rekening, $akunBank, $request) {
+            foreach ($baris as $line) {
+                $nominal = (float) $line->debit;
+                if ($nominal <= 0) {
+                    continue;
+                }
+
+                $desc = 'Setoran kas tunai ke '.$reconciliation->bankAccount->label()
+                    .' — '.$line->description;
+
+                $jurnal = \App\Models\JournalEntry::create([
+                    // Runnya sendiri tidak punya entity_id; yayasannya diambil
+                    // dari rekening yang direkonsiliasi.
+                    'entity_id' => $rekening->entity_id,
+                    'vihara_id' => $line->setoran_vihara_id,
+                    'entry_date' => $line->date,
+                    'reference_type' => 'setoran_tunai',
+                    'reference_id' => $line->id,
+                    'description' => $desc,
+                    'total_debit' => $nominal,
+                    'total_credit' => $nominal,
+                    'status' => 'posted',
+                    'posted_at' => now(),
+                    'posted_by_user_id' => $request->user()?->id,
+                    'created_by_user_id' => $request->user()?->id,
+                ]);
+
+                \App\Models\JournalLine::create([
+                    'journal_entry_id' => $jurnal->id,
+                    'account_code' => $akunBank,
+                    'debit' => $nominal,
+                    'credit' => 0,
+                    'description' => $desc,
+                ]);
+                \App\Models\JournalLine::create([
+                    'journal_entry_id' => $jurnal->id,
+                    'account_code' => '1115',
+                    'debit' => 0,
+                    'credit' => $nominal,
+                    'description' => $desc,
+                ]);
+
+                $line->update(['setoran_journal_entry_id' => $jurnal->id]);
+            }
+        });
     }
 
     public function destroy(Request $request, ReconciliationRun $reconciliation): JsonResponse

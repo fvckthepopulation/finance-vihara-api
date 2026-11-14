@@ -24,7 +24,19 @@ use Illuminate\Support\Facades\DB;
 class LaporanController extends Controller
 {
     /** Kas & setara kas (COA v2: kas kecil, kas penerimaan, bank ops, bank donasi). */
+    /**
+     * Akun kas & setara BAWAAN. Dipakai hanya sebagai cadangan kalau bagan
+     * akun kosong; yang sebenarnya dibaca kodeKas(), supaya akun baru dari
+     * menu Chart of Accounts ikut masuk laporan (FV-57).
+     */
     private const KAS = ['1110', '1115', '1120', '1130'];
+
+    /**
+     * Dana di payment gateway — 11xx juga, tapi dilaporkan sebagai barisnya
+     * sendiri di Posisi Keuangan, jadi tidak ikut dihitung sebagai kas
+     * supaya tidak dobel.
+     */
+    private const AKUN_PG_CLEARING = '1160';
 
     /**
      * Pendapatan donasi = kanal × pembatasan (41x0 KM, 42x0 transfer,
@@ -47,6 +59,7 @@ class LaporanController extends Controller
     /** Akun clearing/rekonsiliasi sementara (9xxx) — target saldo Rp0. */
     private const PREFIX_REKON = '9';
 
+    /** Cadangan; yang sebenarnya dibaca kodeLiabilitas() dari COA (FV-57). */
     private const LIABILITAS = ['2110', '2310'];
 
     private const ARUS_KAS_LABELS = [
@@ -223,13 +236,13 @@ class LaporanController extends Controller
         // ---------- Laporan Posisi Keuangan (per akhir periode) ----------
         $kasRows = [];
         $kasTotal = 0.0;
-        foreach (self::KAS as $code) {
+        foreach ($this->kodeKas() as $code) {
             $bal = $cum[$code] ?? 0.0; // aset: debit-normal
             $kasTotal += $bal;
             $kasRows[] = ['code' => $code, 'name' => $names[$code] ?? $code, 'balance' => $this->fmt($bal)];
         }
 
-        $pgClearing = $cum['1160'] ?? 0.0;
+        $pgClearing = $cum[self::AKUN_PG_CLEARING] ?? 0.0;
 
         // Aset lancar lainnya (13xx uang muka) + saldo clearing/rekonsiliasi
         // sementara (9xxx — seharusnya Rp0 setelah rekonsiliasi selesai).
@@ -246,7 +259,7 @@ class LaporanController extends Controller
 
         $liabRows = [];
         $liabTotal = 0.0;
-        foreach (self::LIABILITAS as $code) {
+        foreach ($this->kodeLiabilitas() as $code) {
             $bal = -($cum[$code] ?? 0.0); // liabilitas: credit-normal
             $liabTotal += $bal;
             $liabRows[] = ['code' => $code, 'name' => $names[$code] ?? $code, 'balance' => $this->fmt($bal)];
@@ -262,12 +275,21 @@ class LaporanController extends Controller
         $bebanFundraising = $this->sumPrefix($period, self::PREFIX_FUNDRAISING);
         $bebanTotal = $bebanProgram + $bebanAdmin + $bebanFundraising;
 
+        // Saldo akun aset neto itu sendiri (3100/3200). Jurnal saldo awal
+        // "Dr 1120 / Kr 3100" menambah aset TANPA menambah pendapatan, jadi
+        // kalau akun ini tidak dibaca, asetnya bertambah sementara aset
+        // netonya tidak — dan Laporan Posisi Keuangan tidak pernah seimbang
+        // (FV-54). Yang SEBELUM periode jadi saldo awal; yang DI DALAM
+        // periode jadi kenaikan periode berjalan.
+        [$ekuitasAwalTp, $ekuitasAwalDp] = $this->asetNetoSplit($before);
+        [$ekuitasPeriodTp, $ekuitasPeriodDp] = $this->asetNetoSplit($period);
+
         // Aset neto: seluruh beban dialokasikan ke TP (praktik mockup —
         // pengeluaran dana terikat dicatat sebagai beban TP).
-        $awalTp = $revTpBefore - $bebanBefore;
-        $awalDp = $revDpBefore;
-        $kenaikanTp = $revTpPeriod - $bebanTotal;
-        $kenaikanDp = $revDpPeriod;
+        $awalTp = $revTpBefore - $bebanBefore + $ekuitasAwalTp;
+        $awalDp = $revDpBefore + $ekuitasAwalDp;
+        $kenaikanTp = $revTpPeriod - $bebanTotal + $ekuitasPeriodTp;
+        $kenaikanDp = $revDpPeriod + $ekuitasPeriodDp;
         $akhirTp = $awalTp + $kenaikanTp;
         $akhirDp = $awalDp + $kenaikanDp;
 
@@ -292,6 +314,12 @@ class LaporanController extends Controller
             'balance_ok' => abs($selisih) < 0.005,
             'selisih' => $this->fmt($selisih),
         ];
+
+        // Pelepasan pembatasan periode berjalan (FV-55). Angkanya sudah ikut
+        // terhitung di kenaikan TP/DP lewat akun 3100/3200; yang diambil di
+        // sini nilainya saja, untuk DITAMPILKAN sebagai barisnya sendiri —
+        // template Laporan Penghasilan Komprehensif memang punya baris itu.
+        $pelepasan = $this->pelepasanPembatasan($viharaFilter, $startD, $endD);
 
         // ---------- Laporan Penghasilan Komprehensif (periode) ----------
         $pendapatanRows = [];
@@ -326,6 +354,9 @@ class LaporanController extends Controller
                 'total' => $this->fmt($revTpPeriod + $revDpPeriod),
             ],
             'beban' => ['rows' => $bebanRows, 'total' => $this->fmt($bebanTotal)],
+            // Pindah kelas, bukan penghasilan baru: DP berkurang, TP
+            // bertambah, totalnya nol.
+            'pelepasan_pembatasan' => $this->tdpTriple($pelepasan, -$pelepasan),
             'kenaikan' => [
                 'tp' => $this->fmt($kenaikanTp),
                 'dp' => $this->fmt($kenaikanDp),
@@ -338,6 +369,7 @@ class LaporanController extends Controller
             'awal' => $this->tdpTriple($awalTp, $awalDp),
             'pendapatan' => $this->tdpTriple($revTpPeriod, $revDpPeriod),
             'beban' => $this->tdpTriple(-$bebanTotal, 0.0),
+            'pelepasan_pembatasan' => $this->tdpTriple($pelepasan, -$pelepasan),
             'kenaikan' => $this->tdpTriple($kenaikanTp, $kenaikanDp),
             'akhir' => $this->tdpTriple($akhirTp, $akhirDp),
         ];
@@ -592,6 +624,98 @@ class LaporanController extends Controller
      * @param array<string, float> $net
      * @return array{0: float, 1: float}
      */
+    /**
+     * Kode akun aktif per jenis, langsung dari bagan akun (FV-57).
+     *
+     * Laporan dulu memakai daftar kode yang ditulis tetap di kelas ini, jadi
+     * akun yang ditambahkan admin lewat menu Chart of Accounts tidak pernah
+     * muncul di laporan mana pun — saldonya hilang tanpa jejak. Header
+     * (1100, 2100, 4100, …) dikecualikan: itu hanya pengelompokan, saldonya
+     * ada di anak-anaknya.
+     *
+     * @return list<string>
+     */
+    private function kodeAkun(string $type, ?string $prefix = null, array $kecuali = []): array
+    {
+        static $cache = [];
+        $kunci = $type.'|'.$prefix.'|'.implode(',', $kecuali);
+        if (isset($cache[$kunci])) {
+            return $cache[$kunci];
+        }
+
+        $kode = Account::query()
+            ->where('type', $type)
+            ->where('is_header', false)
+            ->when($prefix !== null, fn ($q) => $q->where('code', 'like', $prefix.'%'))
+            ->orderBy('code')
+            ->pluck('code')
+            ->reject(fn ($c) => in_array($c, $kecuali, true))
+            ->values()
+            ->all();
+
+        return $cache[$kunci] = $kode;
+    }
+
+    /** Kas & setara kas: seluruh aset 11xx kecuali clearing payment gateway. */
+    private function kodeKas(): array
+    {
+        $kode = $this->kodeAkun('asset', '11', [self::AKUN_PG_CLEARING]);
+
+        return $kode !== [] ? $kode : self::KAS;
+    }
+
+    private function kodeLiabilitas(): array
+    {
+        $kode = $this->kodeAkun('liability');
+
+        return $kode !== [] ? $kode : self::LIABILITAS;
+    }
+
+    /**
+     * Saldo akun ASET NETO (3xxx) dari sebuah peta saldo, dipisah TP/DP.
+     *
+     * Akun ekuitas bersaldo normal kredit, jadi tandanya dibalik. Kode
+     * berawalan 32 = Dengan Pembatasan; selain itu Tanpa Pembatasan.
+     *
+     * @param array<string, float> $net
+     * @return array{0: float, 1: float}
+     */
+    private function asetNetoSplit(array $net): array
+    {
+        $tp = 0.0;
+        $dp = 0.0;
+        foreach ($this->kodeAkun('equity') as $code) {
+            $saldo = -($net[$code] ?? 0.0);
+            if (str_starts_with($code, '32')) {
+                $dp += $saldo;
+            } else {
+                $tp += $saldo;
+            }
+        }
+
+        return [$tp, $dp];
+    }
+
+    /**
+     * Total pelepasan pembatasan yang dicatat dalam periode, untuk satu
+     * filter vihara. Dibaca dari jurnalnya (PelepasanPembatasanService),
+     * bukan dihitung ulang dari beban — yang dilepas bisa lebih kecil
+     * daripada bebannya saat dana terikatnya tidak cukup.
+     */
+    private function pelepasanPembatasan(array $viharaFilter, string $startD, string $endD): float
+    {
+        // Alias 'je' dipakai supaya applyViharaFilter() yang sama bisa
+        // dipakai ulang — filternya menulis kolom je.vihara_id.
+        $q = DB::table('journal_entries as je')
+            ->where('je.reference_type', \App\Services\PelepasanPembatasanService::REFERENSI)
+            ->where('je.status', 'posted')
+            ->whereBetween('je.entry_date', [$startD, $endD]);
+
+        $this->applyViharaFilter($q, $viharaFilter);
+
+        return (float) $q->sum('je.total_debit');
+    }
+
     private function revenueSplit(array $net): array
     {
         $tp = 0.0;

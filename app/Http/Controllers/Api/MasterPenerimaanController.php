@@ -34,8 +34,17 @@ class MasterPenerimaanController extends MasterPengeluaranController
     protected const SEBUTAN_AKUN = 'akun jenis pendapatan';
 
     /**
-     * Akun COA TIDAK wajib di sini. Kosong berarti "ikuti aturan kanal" —
-     * perilaku yang sudah berjalan dan yang dipakai seluruh nama bawaan.
+     * Nama Penerimaan TIDAK punya akun sendiri (FV-49).
+     *
+     * Ini mengoreksi FV-45, yang sempat menyediakan akun opsional per nama.
+     * Penguji benar: akun per nama memutus aturan pembatasan x kanal, dan dua
+     * penerimaan berkategori sama bisa mendarat di akun pendapatan berbeda —
+     * kolom TP/DP di laporan ISAK 35 jadi tidak bisa dipercaya.
      */
     protected const AKUN_WAJIB = false;
+
+    protected const AKUN_PER_NAMA = false;
+
+    /** Kategori dana wajib menyatakan pembatasannya. */
+    protected const PUNYA_PEMBATASAN = true;
 }

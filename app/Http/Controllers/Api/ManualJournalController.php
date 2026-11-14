@@ -89,9 +89,16 @@ class ManualJournalController extends Controller
 
         // Viewable for any source (manual + auto-posted). Deletion stays
         // manual-only (see destroy()).
-        return response()->json(
-            $journalEntry->load(['entity:id,code,legal_name', 'vihara:id,code,name', 'lines', 'lines.account:code,name', 'createdBy:id,name', 'postedBy:id,name']),
-        );
+        $journalEntry->load([
+            'entity:id,code,legal_name', 'vihara:id,code,name', 'lines', 'lines.account:code,name',
+            'createdBy:id,name', 'postedBy:id,name', 'submittedBy:id,name', 'rejectedBy:id,name',
+        ]);
+
+        // Ringkasan transaksi sumbernya ikut dikirim — detail dan daftar
+        // jadi menyebut hal yang sama (FV-51 poin 3).
+        $journalEntry->setAttribute('source', $this->ringkasanSumber($journalEntry));
+
+        return response()->json($journalEntry);
     }
 
     /**
@@ -131,6 +138,9 @@ class ManualJournalController extends Controller
             'name' => $row->name ?? null,
             'counterparty' => $row->payee_name ?? $row->source_name ?? null,
             'reference' => $row->reference ?? null,
+            // Catatan penginput: ditampilkan sebagai keterangan TERPISAH,
+            // tidak lagi menimpa deskripsi baris jurnal (FV-51 poin 2).
+            'catatan' => $row->description ?? null,
             'id' => $row->id,
         ];
     }
@@ -220,6 +230,150 @@ class ManualJournalController extends Controller
         });
 
         return response()->json($entry->load('lines', 'entity:id,code', 'vihara:id,code,name'), 201);
+    }
+
+    /**
+     * POST .../{id}/submit — ajukan draft jurnal ke antrean persetujuan.
+     *
+     * Kelengkapan ditegakkan di sini, bukan saat penyimpanan: draft memang
+     * boleh setengah jadi, tapi yang masuk antrean orang lain harus utuh dan
+     * seimbang (FV-53 poin 1).
+     */
+    public function submit(Request $request, JournalEntry $journalEntry): JsonResponse
+    {
+        $this->pastikanManual($journalEntry);
+        ViharaScopeService::guardRecord($request, $journalEntry->vihara_id);
+        $this->guardPemilikDraft($request, $journalEntry, 'jurnal');
+
+        if (! in_array($journalEntry->status, ['draft', 'rejected'], true)) {
+            return response()->json([
+                'message' => 'Hanya jurnal berstatus draft atau ditolak yang bisa diajukan.',
+            ], 422);
+        }
+        if ($kurang = $this->kelengkapanKurang($journalEntry)) {
+            return response()->json(['message' => $kurang], 422);
+        }
+
+        $journalEntry->forceFill([
+            'status' => 'submitted',
+            'submitted_at' => now(),
+            'submitted_by_user_id' => $request->user()->id,
+            // Pengajuan ulang membersihkan jejak penolakan lama.
+            'rejected_at' => null,
+            'rejected_by_user_id' => null,
+            'reject_reason' => null,
+        ])->save();
+
+        return response()->json($journalEntry->fresh());
+    }
+
+    /**
+     * POST .../{id}/post — setujui dan posting jurnal.
+     *
+     * Dari antrean (submitted), atau langsung dari draft bagi pemegang
+     * journal.create + journal.approve. Route-nya dijaga journal.approve,
+     * jadi pencatat biasa tidak bisa memposting pekerjaannya sendiri.
+     */
+    public function post(Request $request, JournalEntry $journalEntry): JsonResponse
+    {
+        $this->pastikanManual($journalEntry);
+        ViharaScopeService::guardRecord($request, $journalEntry->vihara_id);
+
+        if (! in_array($journalEntry->status, ['draft', 'submitted'], true)) {
+            return response()->json([
+                'message' => 'Jurnal ini sudah diproses, tidak bisa diposting lagi.',
+            ], 422);
+        }
+        // Posting LANGSUNG dari draft hanya untuk yang juga boleh mencatat;
+        // selain itu jurnal harus lewat antrean dulu supaya ada dua pasang
+        // mata, sesuai pola maker-checker modul lain.
+        if ($journalEntry->status === 'draft' && ! $request->user()->can('journal.create')) {
+            return response()->json([
+                'message' => 'Jurnal ini belum diajukan. Minta pembuatnya mengajukan dulu.',
+            ], 422);
+        }
+        if ($kurang = $this->kelengkapanKurang($journalEntry)) {
+            return response()->json(['message' => $kurang], 422);
+        }
+
+        PeriodLockService::guard($journalEntry->entity_id, $journalEntry->entry_date, 'entry_date');
+        $journalEntry->runPostAction($request->user());
+
+        return response()->json($journalEntry->fresh()->load('lines'));
+    }
+
+    /** POST .../{id}/reject — tolak pengajuan, dengan alasan yang wajib. */
+    public function reject(Request $request, JournalEntry $journalEntry): JsonResponse
+    {
+        $this->pastikanManual($journalEntry);
+        ViharaScopeService::guardRecord($request, $journalEntry->vihara_id);
+
+        if ($journalEntry->status !== 'submitted') {
+            return response()->json([
+                'message' => 'Hanya jurnal yang sedang menunggu persetujuan yang bisa ditolak.',
+            ], 422);
+        }
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'min:3', 'max:255'],
+        ], [
+            'reason.required' => 'Alasan penolakan wajib diisi.',
+            'reason.min' => 'Alasan penolakan terlalu singkat.',
+        ]);
+
+        // Dikembalikan ke pembuatnya, bukan dihapus: pengaju perlu tahu apa
+        // yang salah dan bisa memperbaiki lalu mengajukan lagi.
+        $journalEntry->forceFill([
+            'status' => 'rejected',
+            'rejected_at' => now(),
+            'rejected_by_user_id' => $request->user()->id,
+            'reject_reason' => $data['reason'],
+        ])->save();
+
+        return response()->json($journalEntry->fresh());
+    }
+
+    /** Jurnal otomatis dari transaksi tidak diurus di sini. */
+    private function pastikanManual(JournalEntry $journalEntry): void
+    {
+        abort_unless($journalEntry->reference_type === 'manual', 404, 'Bukan manual journal.');
+    }
+
+    /**
+     * Hanya pembuat draft (atau superadmin) yang boleh mengajukannya —
+     * aturan yang sama dengan pembayaran/penerimaan (FV-44).
+     */
+    private function guardPemilikDraft(Request $request, JournalEntry $entry, string $label): void
+    {
+        $user = $request->user();
+        if ($user->hasRole('superadmin')) {
+            return;
+        }
+        if ($entry->created_by_user_id !== null
+            && (int) $entry->created_by_user_id === (int) $user->id) {
+            return;
+        }
+
+        abort(403, "Hanya pembuat draft {$label} ini yang bisa mengajukannya.");
+    }
+
+    /** @return string|null pesan kekurangan, null kalau sudah lengkap */
+    private function kelengkapanKurang(JournalEntry $entry): ?string
+    {
+        $entry->loadMissing('lines');
+        if ($entry->lines->count() < 2) {
+            return 'Jurnal harus punya minimal dua baris.';
+        }
+        $debit = (float) $entry->lines->sum('debit');
+        $kredit = (float) $entry->lines->sum('credit');
+        if (round($debit - $kredit, 2) !== 0.0) {
+            return 'Jurnal belum seimbang: debit dan kredit harus sama.';
+        }
+        if ($debit <= 0) {
+            return 'Nilai jurnal tidak boleh nol.';
+        }
+
+        return null;
     }
 
     /**

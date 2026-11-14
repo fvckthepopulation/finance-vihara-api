@@ -17,6 +17,9 @@ use Illuminate\Support\Facades\DB;
  */
 class KasBankController extends Controller
 {
+    /** Kas Penerimaan Langsung — uang tunai yang belum disetor ke bank. */
+    private const AKUN_KAS_TUNAI = '1115';
+
     public function index(Request $request): JsonResponse
     {
         $request->validate([
@@ -189,17 +192,51 @@ class KasBankController extends Controller
     }
 
     /** Kas tunai = penerimaan tunai − pembayaran tunai − topup kas kecil dari kas tunai (posted). */
-    private function kasTunai(?array $viharaIds): string
+    /**
+     * Kas tunai (1115 Kas Penerimaan Langsung) — kartu tersendiri (FV-52).
+     *
+     * Dihitung dari BUKU BESAR, bukan dari dokumen. Dulu dihitung ulang dari
+     * penerimaan tunai − pembayaran tunai − topup kas kecil, dan hitungan
+     * seperti itu pasti menyimpang begitu ada jurnal lain yang menyentuh 1115
+     * — mis. setoran tunai ke bank yang dicatat saat rekonsiliasi. Dengan
+     * membaca jurnalnya, angka di Kas & Bank dijamin sama dengan saldo akun
+     * 1115 di Laporan Posisi Keuangan (FV-52 poin 8).
+     *
+     * Uang tunai dipegang masing-masing vihara, jadi selain totalnya
+     * dikirim juga rinciannya per vihara.
+     *
+     * @return array{total: string, per_vihara: list<array{vihara_id: int|null, vihara: string, saldo: string}>}
+     */
+    private function kasTunai(?array $viharaIds): array
     {
-        $in = (float) DB::table('penerimaan')->where('status', 'posted')->where('method', 'tunai')
-            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))->sum('amount');
-        $out = (float) DB::table('pembayaran')->where('status', 'posted')->where('method', 'tunai')
-            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))->sum('amount');
-        $topup = (float) DB::table('petty_cash_movements')->where('status', 'posted')
-            ->where('subtype', 'topup')->whereNull('source_bank_account_id')
-            ->when($viharaIds !== null, fn ($q) => $q->whereIn('vihara_id', $viharaIds))->sum('amount');
+        $rows = DB::table('journal_lines as jl')
+            ->join('journal_entries as je', 'je.id', '=', 'jl.journal_entry_id')
+            ->leftJoin('viharas as v', 'v.id', '=', 'je.vihara_id')
+            ->where('jl.account_code', self::AKUN_KAS_TUNAI)
+            ->whereNotNull('je.posted_at')
+            ->where('je.status', 'posted')
+            ->when($viharaIds !== null, fn ($q) => $q->whereIn('je.vihara_id', $viharaIds))
+            ->groupBy('je.vihara_id', 'v.name')
+            ->selectRaw('je.vihara_id, v.name as vihara, SUM(jl.debit - jl.credit) as saldo')
+            ->orderBy('v.name')
+            ->get();
 
-        return number_format($in - $out - $topup, 2, '.', '');
+        $total = 0.0;
+        $perVihara = [];
+        foreach ($rows as $r) {
+            $saldo = (float) $r->saldo;
+            $total += $saldo;
+            $perVihara[] = [
+                'vihara_id' => $r->vihara_id !== null ? (int) $r->vihara_id : null,
+                'vihara' => $r->vihara ?? 'Tingkat yayasan',
+                'saldo' => number_format($saldo, 2, '.', ''),
+            ];
+        }
+
+        return [
+            'total' => number_format($total, 2, '.', ''),
+            'per_vihara' => $perVihara,
+        ];
     }
 
     /**

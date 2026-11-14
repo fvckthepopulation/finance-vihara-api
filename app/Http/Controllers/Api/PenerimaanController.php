@@ -26,35 +26,31 @@ class PenerimaanController extends Controller
     /**
      * Akun pendapatan untuk satu penerimaan.
      *
-     * Urutannya: COA yang dipasang di master Nama Penerimaan (FV-45 poin 5),
-     * lalu akun bawaan kategori di master, baru aturan kanal × pembatasan
-     * (41x0 KM, 42x0 transfer, 43x0 tunai; suspense 2310).
+     * Ditentukan oleh KATEGORI-nya saja: pembatasan (TP/DP/suspense) x kanal
+     * penerimaan. Nama Penerimaan sengaja TIDAK punya akun sendiri — kalau
+     * punya, dua penerimaan dengan kategori sama bisa mendarat di akun
+     * pendapatan berbeda dan kolom TP/DP di laporan ISAK 35 jadi tidak bisa
+     * dipercaya. Itu keputusan FV-49, mengoreksi FV-45 yang sempat
+     * menyediakan akun per nama.
      *
-     * Dua tingkat pertama sengaja dibiarkan KOSONG oleh migrasi master: tanpa
-     * isian, perilakunya persis seperti sebelumnya. Mengisi COA di master
-     * berarti memilih akun tetap untuk nama itu, dan dengan sendirinya
-     * melepasnya dari pembedaan kanal — itu keputusan yang harus disengaja,
-     * bukan efek samping.
+     * Urutannya: pembatasan dari MASTER (bisa diatur admin), lalu konstanta
+     * lama sebagai cadangan untuk kategori yang belum punya barisnya.
      */
     private function akunKredit(string $category, ?string $name, ?string $method): ?string
     {
-        if ($name !== null && $name !== '') {
-            $akun = \App\Models\TransactionName::query()
-                ->where('type', 'penerimaan')
-                ->where('category', $category)
-                ->where('name', $name)
-                ->value('coa_account_code');
-            if ($akun) {
-                return $akun;
+        $kategori = \App\Models\TransactionCategory::query()
+            ->where('type', \App\Models\TransactionCategory::TYPE_PENERIMAAN)
+            ->where('code', $category)
+            ->first();
+
+        if ($kategori !== null) {
+            $akun = $kategori->akunPerMetode();
+            if ($akun !== null) {
+                return $akun[$method ?? 'transfer'] ?? $akun['transfer'];
             }
         }
 
-        $bawaan = \App\Models\TransactionCategory::query()
-            ->where('type', \App\Models\TransactionCategory::TYPE_PENERIMAAN)
-            ->where('code', $category)
-            ->value('default_debit_code');
-
-        return $bawaan ?: Penerimaan::creditCodeFor($category, $method);
+        return Penerimaan::creditCodeFor($category, $method);
     }
 
     public function index(Request $request): JsonResponse
@@ -239,6 +235,22 @@ class PenerimaanController extends Controller
         );
     }
 
+    /** Deskripsi jurnal sebuah penerimaan — lihat FV-51. */
+    private function deskripsiJurnal(Penerimaan $penerimaan): string
+    {
+        $kategori = \App\Models\TransactionCategory::labelPenerimaan($penerimaan->category)
+            ?? $penerimaan->category;
+        $donatur = $penerimaan->sourcePayee?->name ?? $penerimaan->source_name;
+
+        $bagian = array_values(array_filter([
+            $penerimaan->name,
+            implode(' · ', array_filter([$donatur, $penerimaan->reference])) ?: null,
+            "Penerimaan {$penerimaan->code} — {$kategori}",
+        ]));
+
+        return implode(' — ', $bagian);
+    }
+
     public function post(Request $request, Penerimaan $penerimaan): JsonResponse
     {
         ViharaScopeService::guardRecord($request, $penerimaan->vihara_id);
@@ -257,8 +269,7 @@ class PenerimaanController extends Controller
         }
 
         DB::transaction(function () use ($penerimaan, $request) {
-            $desc = "Penerimaan {$penerimaan->code} — "
-                . (\App\Models\TransactionCategory::labelPenerimaan($penerimaan->category) ?? $penerimaan->category);
+            $desc = $this->deskripsiJurnal($penerimaan);
 
             $journal = JournalEntry::create([
                 'entity_id' => $penerimaan->entity_id,
@@ -279,14 +290,16 @@ class PenerimaanController extends Controller
                 'account_code' => $penerimaan->destination_account_code,
                 'debit' => $penerimaan->amount,
                 'credit' => 0,
-                'description' => $penerimaan->description ?? $desc,
+                // Catatan penginput tidak menimpa deskripsi baris (FV-51).
+                'description' => $desc,
             ]);
             JournalLine::create([
                 'journal_entry_id' => $journal->id,
                 'account_code' => $penerimaan->credit_account_code,
                 'debit' => 0,
                 'credit' => $penerimaan->amount,
-                'description' => $penerimaan->description ?? $desc,
+                // Catatan penginput tidak menimpa deskripsi baris (FV-51).
+                'description' => $desc,
             ]);
 
             $penerimaan->update([
@@ -518,8 +531,8 @@ class PenerimaanController extends Controller
         // Mengubah kategori draft ke salah satu dari empat kategori dana
         // karenanya menulis NULL ke credit_account_code, dan barisnya gagal
         // diposting dengan keluhan kelengkapan yang membingungkan. Sekarang
-        // dipakai akunKredit(), yang juga menghormati COA di master nama
-        // penerimaan (FV-45 poin 5).
+        // dipakai akunKredit(), yang menurunkannya dari pembatasan kategori
+        // di master x kanal penerimaan (FV-49).
         if (! empty($data['category']) || array_key_exists('method', $data)) {
             $kategori = $data['category'] ?? $penerimaan->category;
             if ($kategori) {
@@ -619,24 +632,18 @@ class PenerimaanController extends Controller
             ->where('type', \App\Models\TransactionCategory::TYPE_PENERIMAAN)
             ->where('active', true)
             ->orderBy('name')
-            ->get(['code', 'name', 'default_debit_code']);
+            ->get();
 
         $rows = [];
         foreach ($master as $c) {
-            $meta = Penerimaan::CATEGORIES[$c->code] ?? null;
-            $bawaan = $c->default_debit_code;
+            $akun = $c->akunPerMetode() ?? [];
             $rows[] = [
                 'key' => $c->code,
                 'label' => $c->name,
-                'restriction' => $meta['restriction'] ?? null,
-                // Akun kredit final tergantung kanal — kirim per method
-                // supaya frontend bisa menampilkan akun sesuai pilihan.
-                'default_credit' => $bawaan ?: Penerimaan::creditCodeFor($c->code, 'transfer'),
-                'credit_by_method' => [
-                    'auto_credit' => $bawaan ?: Penerimaan::creditCodeFor($c->code, 'auto_credit'),
-                    'transfer' => $bawaan ?: Penerimaan::creditCodeFor($c->code, 'transfer'),
-                    'tunai' => $bawaan ?: Penerimaan::creditCodeFor($c->code, 'tunai'),
-                ],
+                // Pembatasan dari master (FV-49), bukan lagi konstanta.
+                'restriction' => $c->restriction,
+                'default_credit' => $akun['transfer'] ?? null,
+                'credit_by_method' => $akun,
             ];
         }
 

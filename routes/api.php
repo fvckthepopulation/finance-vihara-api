@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\EntityController;
 use App\Http\Controllers\Api\KmReportController;
 use App\Http\Controllers\Api\KasBankController;
+use App\Http\Controllers\Api\JurnalExportController;
 use App\Http\Controllers\Api\ManualJournalController;
 use App\Http\Controllers\Api\MasterPenerimaanController;
 use App\Http\Controllers\Api\MasterPengeluaranController;
@@ -23,6 +24,7 @@ use App\Http\Controllers\Api\PenerimaanController;
 use App\Http\Controllers\Api\PettyCashController;
 use App\Http\Controllers\Api\ReconciliationController;
 use App\Http\Controllers\Api\TransactionController;
+use App\Http\Controllers\Api\TransferRekeningController;
 use App\Http\Controllers\Api\ViharaController;
 use Illuminate\Support\Facades\Route;
 
@@ -161,6 +163,10 @@ Route::middleware(['auth:sanctum', 'user.aktif'])->group(function () {
 
     // Kas & Bank — saldo per rekening vihara + kas kecil per PIC + mutasi.
     Route::get('/kas-bank', [KasBankController::class, 'index'])->middleware('can:cash.view');
+    // Transfer antar rekening (FV-56) — memindahkan dana, bukan mencatat
+    // pendapatan/beban. Izinnya mengikuti pengelolaan rekening.
+    Route::post('/kas-bank/transfer', [TransferRekeningController::class, 'store'])
+        ->middleware('can:cash.account.manage');
 
     // Cash & Bank
     Route::get('/cash/dashboard', [CashController::class, 'dashboard'])->middleware('can:cash.view');
@@ -191,6 +197,10 @@ Route::middleware(['auth:sanctum', 'user.aktif'])->group(function () {
     Route::get('/reconciliation/{reconciliation}', [ReconciliationController::class, 'show'])->middleware('can:reconcile.view');
     Route::post('/reconciliation/{reconciliation}/lines', [ReconciliationController::class, 'storeLine'])->middleware('can:reconcile.import');
     Route::delete('/reconciliation/{reconciliation}/lines/{line}', [ReconciliationController::class, 'destroyLine'])->middleware('can:reconcile.import');
+    // Setoran kas tunai (FV-52): menandai butuh izin mencocokkan; jurnalnya
+    // baru dibuat saat rekonsiliasi diselesaikan (reconcile.finalize).
+    Route::post('/reconciliation/{reconciliation}/lines/{line}/setoran-tunai', [ReconciliationController::class, 'tandaiSetoranTunai'])->middleware('can:reconcile.match');
+    Route::delete('/reconciliation/{reconciliation}/lines/{line}/setoran-tunai', [ReconciliationController::class, 'batalkanSetoranTunai'])->middleware('can:reconcile.match');
     Route::post('/reconciliation/{reconciliation}/import', [ReconciliationController::class, 'import'])->middleware('can:reconcile.import');
     Route::post('/reconciliation/{reconciliation}/match', [ReconciliationController::class, 'match'])->middleware('can:reconcile.match');
     Route::post('/reconciliation/{reconciliation}/unmatch', [ReconciliationController::class, 'unmatch'])->middleware('can:reconcile.match');
@@ -266,9 +276,18 @@ Route::middleware(['auth:sanctum', 'user.aktif'])->group(function () {
 
     // Manual Journal Entry
     Route::get('/journal-entries', [ManualJournalController::class, 'index'])->middleware('can:journal.view');
+    // Unduhan Jurnal & Buku Besar (.xlsx, FV-59) — izinnya mengikuti unduhan
+    // laporan lain, seperti Export CSV di Semua Transaksi.
+    Route::get('/journal-entries/export', JurnalExportController::class)->middleware('can:reports.export');
     Route::post('/journal-entries', [ManualJournalController::class, 'store'])->middleware('can:journal.create');
     Route::get('/journal-entries/{journalEntry}', [ManualJournalController::class, 'show'])->middleware('can:journal.view');
     Route::delete('/journal-entries/{journalEntry}', [ManualJournalController::class, 'destroy'])->middleware('can:journal.create');
+    // Siklus persetujuan jurnal manual (FV-53). Mengajukan butuh izin
+    // mencatat; menyetujui/menolak butuh izin menyetujui — dua pasang mata,
+    // sama seperti pembayaran dan penerimaan.
+    Route::post('/journal-entries/{journalEntry}/submit', [ManualJournalController::class, 'submit'])->middleware('can:journal.create');
+    Route::post('/journal-entries/{journalEntry}/post', [ManualJournalController::class, 'post'])->middleware('can:journal.approve');
+    Route::post('/journal-entries/{journalEntry}/reject', [ManualJournalController::class, 'reject'])->middleware('can:journal.approve');
     Route::post('/journal-entries/{journalEntry}/void', [ManualJournalController::class, 'void'])->middleware('can:journal.void');
 
     // --- Yayasan (entity) CRUD — puncak hirarki tenant ---

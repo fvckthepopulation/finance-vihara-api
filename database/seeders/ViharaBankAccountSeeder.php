@@ -26,9 +26,12 @@ class ViharaBankAccountSeeder extends Seeder
     {
         $vvg = Vihara::where('code', 'VVG')->first();
         if ($vvg) {
+            // Akun COA per rekening sesuai fungsinya (FV-56): BCA rekening
+            // penerimaan donasi, Mandiri rekening operasional yang membiayai
+            // seluruh pengeluaran.
             $rekening = [
-                ['bank_name' => 'Bank BCA',     'account_number' => '6280-3488-88',     'account_name' => $vvg->name],
-                ['bank_name' => 'Bank Mandiri', 'account_number' => '1570-0122-5555-4', 'account_name' => $vvg->name],
+                ['bank_name' => 'Bank BCA',     'account_number' => '6280-3488-88',     'account_name' => $vvg->name, 'coa_account_code' => '1130'],
+                ['bank_name' => 'Bank Mandiri', 'account_number' => '1570-0122-5555-4', 'account_name' => $vvg->name, 'coa_account_code' => '1120'],
             ];
             foreach ($rekening as $r) {
                 $baris = ViharaBankAccount::updateOrCreate(
@@ -37,11 +40,19 @@ class ViharaBankAccountSeeder extends Seeder
                         'bank_name' => $r['bank_name'],
                         'account_number' => $r['account_number'],
                     ],
-                    $r + ['type' => 'bank', 'coa_account_code' => '1130', 'active' => true],
+                    $r + ['type' => 'bank', 'active' => true],
                 );
-                // syncWithoutDetaching, bukan sync: kalau admin sudah menambah
-                // vihara pengguna lain, seeder tidak mencabutnya.
-                $baris->viharas()->syncWithoutDetaching([$vvg->id]);
+                // Rekening DONASI dipakai VVG saja; rekening OPERASIONAL
+                // dibiarkan tanpa vihara pengguna = boleh dipakai SELURUH
+                // vihara yayasan itu.
+                //
+                // Itu bukan kelonggaran: sejak FV-56 semua pengeluaran keluar
+                // dari rekening berakun 1120, jadi vihara yang tidak punya
+                // akses ke satu pun rekening 1120 tidak bisa mencatat
+                // pengeluaran sama sekali.
+                if ($r['coa_account_code'] === '1130') {
+                    $baris->viharas()->syncWithoutDetaching([$vvg->id]);
+                }
             }
         }
 

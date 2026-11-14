@@ -37,6 +37,17 @@ class ViharaBankAccountController extends Controller
             $q->where('type', $type);
         }
 
+        // Saringan menurut KATEGORI BIAYA (FV-56 poin 4): form Input
+        // Pengeluaran hanya boleh menawarkan rekening yang akunnya sesuai
+        // aturan kategori itu — mis. Biaya Operasional hanya dari rekening
+        // ber-akun 1120 Bank Operasional.
+        if ($kategori = $request->string('kategori')->toString()) {
+            $akun = \App\Models\TransactionCategory::akunBankUntuk($kategori);
+            if ($akun !== null) {
+                $q->where('coa_account_code', $akun);
+            }
+        }
+
         // Rekening milik yayasan (FV-36): form menyebut VIHARA transaksinya,
         // dan yang ditawarkan adalah rekening yayasan vihara itu yang memang
         // boleh dipakai olehnya.
@@ -132,7 +143,6 @@ class ViharaBankAccountController extends Controller
 
         $account = $entity->bankAccounts()->create($data + [
             'type' => $data['type'] ?? ViharaBankAccount::TYPE_BANK,
-            'coa_account_code' => $data['coa_account_code'] ?? '1130',
         ]);
         $account->viharas()->sync($pengguna);
 
@@ -193,10 +203,27 @@ class ViharaBankAccountController extends Controller
                 'max:32',
             ],
             'account_name' => [$baru ? 'required' : 'sometimes', 'nullable', 'string', 'max:255'],
-            'coa_account_code' => [$baru ? 'sometimes' : 'sometimes', 'nullable', 'string', 'exists:accounts,code'],
+            // Wajib dipilih sejak FV-56: tidak lagi otomatis 1130 Bank
+            // Donasi. Akunnya menentukan akun bank mana yang dikredit saat
+            // pengeluaran, jadi salah pilih di sini membuat seluruh Laporan
+            // Posisi Keuangan dan Arus Kas ikut salah.
+            'coa_account_code' => [$baru ? 'required' : 'sometimes', 'string', 'exists:accounts,code'],
             'description' => ['sometimes', 'nullable', 'string', 'max:1000'],
             'active' => ['sometimes', 'boolean'],
         ]);
+
+        // Akunnya harus akun ASET yang bukan header. Diperiksa di sini, bukan
+        // lewat Rule::exists()->where('is_header', false): nilai boolean di
+        // rule itu dikirim sebagai string kosong dan Postgres menolaknya.
+        $akun = $data['coa_account_code'] ?? null;
+        if ($akun !== null) {
+            $baris = \App\Models\Account::where('code', $akun)->first();
+            if ($baris === null || $baris->type !== 'asset' || $baris->is_header) {
+                throw ValidationException::withMessages([
+                    'coa_account_code' => 'Akun rekening harus akun aset yang bukan header, mis. 1120 atau 1130.',
+                ]);
+            }
+        }
 
         $namaBank = $data['bank_name'] ?? $existing?->bank_name;
         $nomor = $data['account_number'] ?? $existing?->account_number;

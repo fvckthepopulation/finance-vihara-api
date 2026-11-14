@@ -51,9 +51,21 @@ class MasterPengeluaranController extends Controller
      * Apakah akun COA wajib diisi saat menambah nama?
      *
      * Wajib untuk pengeluaran: akun debit jurnal memang diambil dari sini.
-     * Tidak wajib untuk penerimaan — lihat MasterPenerimaanController.
+     * Untuk penerimaan akun per nama TIDAK ADA sama sekali — lihat
+     * MasterPenerimaanController dan konstanta di bawah.
      */
     protected const AKUN_WAJIB = true;
+
+    /**
+     * Apakah akun di tingkat NAMA dipakai sama sekali?
+     *
+     * Penerimaan: tidak. Akunnya diturunkan dari pembatasan kategori x kanal,
+     * dan akun per nama akan memutus aturan itu (FV-49).
+     */
+    protected const AKUN_PER_NAMA = true;
+
+    /** Apakah kategori punya jenis pembatasan ISAK 35? (penerimaan saja) */
+    protected const PUNYA_PEMBATASAN = false;
 
     // ── Kategori Biaya ─────────────────────────────────────────────────────
 
@@ -84,6 +96,11 @@ class MasterPengeluaranController extends Controller
             'name' => $c->name,
             'description' => $c->description,
             'default_debit_code' => $c->default_debit_code,
+            // Pembatasan ISAK 35 + akun pendapatan yang akan dipakai per
+            // kanal. Layar master menampilkannya, bukan lagi "—" (FV-49).
+            'restriction' => $c->restriction,
+            'restriction_label' => TransactionCategory::PEMBATASAN[$c->restriction] ?? null,
+            'akun_per_metode' => $c->akunPerMetode(),
             'active' => (bool) $c->active,
             'jumlah_nama' => $this->jumlahNama($c->code, null),
             'jumlah_nama_aktif' => $this->jumlahNama($c->code, true),
@@ -102,12 +119,20 @@ class MasterPengeluaranController extends Controller
                     ->where('type', static::TIPE),
             ],
             'name' => ['required', 'string', 'max:255'],
+            // Wajib untuk kategori dana: tanpa ini akun pendapatannya tidak
+            // bisa diturunkan dan laporan ISAK 35 tidak tahu kolomnya (FV-49).
+            'restriction' => [
+                static::PUNYA_PEMBATASAN ? 'required' : 'sometimes',
+                'nullable',
+                Rule::in(array_keys(TransactionCategory::PEMBATASAN)),
+            ],
             'description' => ['sometimes', 'nullable', 'string', 'max:1000'],
             'default_debit_code' => ['sometimes', 'nullable', 'string', 'exists:accounts,code'],
             'active' => ['sometimes', 'boolean'],
         ], [
             'code.regex' => 'Kode hanya boleh huruf kecil, angka, dan garis bawah.',
             'code.unique' => 'Kode kategori sudah dipakai.',
+            'restriction.required' => 'Jenis pembatasan wajib dipilih.',
         ]);
 
         $kategori = TransactionCategory::create($data + [
@@ -125,10 +150,28 @@ class MasterPengeluaranController extends Controller
             // `code` tidak boleh diubah: kolom pembayaran.category menyimpan
             // kode ini apa adanya, jadi mengubahnya memutus transaksi lama.
             'name' => ['sometimes', 'string', 'max:255'],
+            'restriction' => [
+                'sometimes', 'nullable',
+                Rule::in(array_keys(TransactionCategory::PEMBATASAN)),
+            ],
             'description' => ['sometimes', 'nullable', 'string', 'max:1000'],
             'default_debit_code' => ['sometimes', 'nullable', 'string', 'exists:accounts,code'],
             'active' => ['sometimes', 'boolean'],
         ]);
+
+        // Pembatasan tidak boleh diubah begitu kategorinya dipakai transaksi:
+        // jurnal lama sudah terlanjur memakai akun pendapatan hasil
+        // pembatasan yang lama, dan mengubahnya membuat laporan ISAK 35 tidak
+        // cocok lagi dengan buku besarnya. Nonaktifkan dan buat kategori baru
+        // (FV-49 poin 5).
+        if (array_key_exists('restriction', $data)
+            && $data['restriction'] !== $kategori->restriction
+            && $this->kategoriDipakai($kategori->code)) {
+            return response()->json([
+                'message' => 'Jenis pembatasan tidak bisa diubah: kategori ini sudah dipakai transaksi. '
+                    . 'Nonaktifkan kategori ini lalu buat kategori baru.',
+            ], 422);
+        }
 
         // Kategori tidak boleh dinonaktifkan selama masih punya nama aktif —
         // kalau tidak, dropdown Nama Pengeluaran berisi pilihan yang kategori
@@ -206,6 +249,12 @@ class MasterPengeluaranController extends Controller
         $halaman = $q->paginate($perPage);
 
         $label = TransactionCategory::labels(static::TIPE);
+        // Kategori dimuat sekali untuk mewariskan akunnya ke tiap nama.
+        $kategoriMaster = TransactionCategory::query()
+            ->where('type', static::TIPE)
+            ->get()
+            ->keyBy('code');
+
         $halaman->getCollection()->transform(fn (TransactionName $n) => [
             'id' => $n->id,
             'code' => $n->code,
@@ -214,6 +263,11 @@ class MasterPengeluaranController extends Controller
             'name' => $n->name,
             'coa_account_code' => $n->coa_account_code,
             'coa_account_name' => $n->coaAccount?->name,
+            // Untuk penerimaan, akun DIWARISI dari kategorinya dan ditampilkan
+            // per kanal — bukan "—" seperti keluhan FV-49.
+            'akun_per_metode' => static::AKUN_PER_NAMA
+                ? null
+                : $kategoriMaster->get($n->category)?->akunPerMetode(),
             'description' => $n->description,
             'vihara_id' => $n->vihara_id,
             'vihara_name' => $n->vihara?->name,
@@ -273,7 +327,7 @@ class MasterPengeluaranController extends Controller
             'name' => [$baru ? 'required' : 'sometimes', 'string', 'max:255'],
             'code' => ['sometimes', 'nullable', 'string', 'max:48'],
             'coa_account_code' => [
-                $baru && static::AKUN_WAJIB ? 'required' : 'sometimes',
+                $baru && static::AKUN_WAJIB && static::AKUN_PER_NAMA ? 'required' : 'sometimes',
                 'nullable',
                 'string',
                 'exists:accounts,code',
@@ -304,6 +358,15 @@ class MasterPengeluaranController extends Controller
             throw ValidationException::withMessages([
                 'name' => 'Nama ' . static::SEBUTAN . ' sudah ada di kategori ini.',
             ]);
+        }
+
+        // Jenis yang tidak memakai akun per nama (penerimaan) membuang isian
+        // itu apa adanya: akunnya ditentukan kategori, dan menyimpan nilai di
+        // sini hanya akan menyesatkan pembaca master (FV-49).
+        if (! static::AKUN_PER_NAMA) {
+            $data['coa_account_code'] = null;
+
+            return $data;
         }
 
         // Akunnya harus akun beban. Satu pengecualian yang memang ada di bagan

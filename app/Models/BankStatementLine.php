@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'reconciliation_run_id', 'date', 'description', 'debit', 'credit',
     'bank_ref', 'matched_type', 'matched_id', 'matched_journal_line_id',
     'status', 'source', 'signature', 'notes',
+    'setoran_vihara_id', 'setoran_journal_entry_id',
 ])]
 class BankStatementLine extends Model
 {
@@ -17,6 +18,13 @@ class BankStatementLine extends Model
 
     /** Dokumen sistem yang bisa di-match ke baris rekening koran. */
     public const MATCHED_TYPES = ['penerimaan', 'pembayaran', 'petty_topup'];
+
+    /**
+     * Penanda baris setoran kas tunai (FV-52) — bukan dokumen sistem, jadi
+     * sengaja TIDAK masuk MATCHED_TYPES: tidak ada yang perlu dicocokkan,
+     * yang ada justru jurnal baru yang dibuat saat rekonsiliasi selesai.
+     */
+    public const TIPE_SETORAN_TUNAI = 'setoran_tunai';
 
     protected function casts(): array
     {

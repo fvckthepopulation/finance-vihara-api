@@ -16,7 +16,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * itu. Jadi mengubah master ini tidak memutus transaksi yang sudah ada.
  */
 #[Fillable([
-    'type', 'code', 'name', 'description', 'default_debit_code', 'active',
+    'type', 'code', 'name', 'restriction', 'description', 'default_debit_code',
+    'bank_account_code', 'active',
 ])]
 class TransactionCategory extends Model
 {
@@ -31,6 +32,63 @@ class TransactionCategory extends Model
         return [
             'active' => 'boolean',
         ];
+    }
+
+    /** Jenis pembatasan kategori dana (FV-49). */
+    public const PEMBATASAN = [
+        'tp' => 'Tanpa Pembatasan',
+        'dp' => 'Dengan Pembatasan',
+        'suspense' => 'Belum Teridentifikasi',
+    ];
+
+    /**
+     * Akun pendapatan kategori ini per kanal penerimaan.
+     *
+     * Dikembalikan sebagai peta metode => kode akun, supaya layar master bisa
+     * MENAMPILKAN akun yang akan dipakai — keluhan FV-49 adalah kolomnya
+     * selalu "—" padahal akunnya memang ditentukan sistem, bukan kosong.
+     *
+     * Kategori suspense tidak mengikuti kanal: akunnya tetap (2310).
+     *
+     * @return array<string, string|null>|null null untuk kategori pengeluaran
+     */
+    public function akunPerMetode(): ?array
+    {
+        if ($this->type !== self::TYPE_PENERIMAAN) {
+            return null;
+        }
+        if ($this->restriction === 'suspense' || $this->restriction === null) {
+            $akun = $this->default_debit_code ?: '2310';
+
+            return ['auto_credit' => $akun, 'transfer' => $akun, 'tunai' => $akun];
+        }
+
+        $digit = $this->restriction === 'dp' ? '2' : '1';
+
+        return [
+            'auto_credit' => '41'.$digit.'0',
+            'transfer' => '42'.$digit.'0',
+            'tunai' => '43'.$digit.'0',
+        ];
+    }
+
+    /**
+     * Akun bank yang sah untuk kategori pengeluaran ini (FV-56).
+     *
+     * null = tidak dibatasi. Saat ini seluruh kategori pengeluaran diisi
+     * 1120 Bank Operasional: dana donasi di 1130 dipindahkan dulu lewat
+     * transfer antar rekening, dan pembatasannya dilacak lewat aset neto.
+     */
+    public static function akunBankUntuk(?string $kategoriPengeluaran): ?string
+    {
+        if ($kategoriPengeluaran === null || $kategoriPengeluaran === '') {
+            return null;
+        }
+
+        return static::query()
+            ->where('type', self::TYPE_PENGELUARAN)
+            ->where('code', $kategoriPengeluaran)
+            ->value('bank_account_code');
     }
 
     public function names(): HasMany

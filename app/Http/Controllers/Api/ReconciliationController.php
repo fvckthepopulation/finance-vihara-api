@@ -496,7 +496,9 @@ class ReconciliationController extends Controller
         return (float) DB::table('journal_lines as jl')
             ->join('journal_entries as je', 'je.id', '=', 'jl.journal_entry_id')
             ->where('jl.account_code', '1115')
-            ->where('je.status', 'posted')
+            // Jurnal terposting (posted_at), sama dengan Kas & Bank dan
+            // laporan. Status posted saja akan melewatkan jurnal manual yang
+            // dibatalkan sementara pembaliknya terhitung.
             ->whereNotNull('je.posted_at')
             ->where('je.vihara_id', $viharaId)
             ->sum(DB::raw('jl.debit - jl.credit'));

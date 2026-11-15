@@ -20,6 +20,9 @@ class KasBankController extends Controller
     /** Kas Penerimaan Langsung — uang tunai yang belum disetor ke bank. */
     private const AKUN_KAS_TUNAI = '1115';
 
+    /** Jumlah baris mutasi kas tunai / kas kecil yang dikirim. */
+    private const BATAS_MUTASI = 100;
+
     public function index(Request $request): JsonResponse
     {
         $request->validate([
@@ -38,6 +41,10 @@ class KasBankController extends Controller
             'kas_kecil' => $this->kasKecil($viharaIds),
             'kas_tunai' => $this->kasTunai($viharaIds),
             'mutasi' => $this->mutasi($viharaIds, $bankAccountId),
+            // Mutasi kartu Kas Tunai & Kas Kecil — dari sumber yang sama
+            // dengan saldo kartunya, supaya daftarnya selalu cocok.
+            'mutasi_kas_tunai' => $this->mutasiKasTunai($viharaIds),
+            'mutasi_kas_kecil' => $this->mutasiKasKecil($viharaIds),
         ]);
     }
 
@@ -222,8 +229,11 @@ class KasBankController extends Controller
             ->join('journal_entries as je', 'je.id', '=', 'jl.journal_entry_id')
             ->leftJoin('viharas as v', 'v.id', '=', 'je.vihara_id')
             ->where('jl.account_code', self::AKUN_KAS_TUNAI)
+            // Jurnal TERPOSTING, sama dengan Laporan Posisi Keuangan. Jangan
+            // menyaring status = posted: jurnal manual yang dibatalkan
+            // berstatus cancelled tetapi pembaliknya posted, sehingga saldo
+            // kurang sebesar nilai jurnal yang dibatalkan.
             ->whereNotNull('je.posted_at')
-            ->where('je.status', 'posted')
             ->when($viharaIds !== null, fn ($q) => $q->whereIn('je.vihara_id', $viharaIds))
             ->groupBy('je.vihara_id', 'v.name')
             ->selectRaw('je.vihara_id, v.name as vihara, SUM(jl.debit - jl.credit) as saldo')
@@ -246,6 +256,92 @@ class KasBankController extends Controller
             'total' => number_format($total, 2, '.', ''),
             'per_vihara' => $perVihara,
         ];
+    }
+
+    /**
+     * Mutasi Kas Tunai (1115) terbaru, dari buku besar — sumber yang sama
+     * dengan saldo kartunya. Jurnal yang dibatalkan tetap tampil bersama
+     * pembaliknya (keduanya bertanda), karena keduanya ada di buku besar.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function mutasiKasTunai(?array $viharaIds): array
+    {
+        $rows = DB::table('journal_lines as jl')
+            ->join('journal_entries as je', 'je.id', '=', 'jl.journal_entry_id')
+            ->leftJoin('viharas as v', 'v.id', '=', 'je.vihara_id')
+            ->leftJoin('penerimaan as pn', function ($j) {
+                $j->on('pn.id', '=', 'je.reference_id')->whereIn('je.reference_type', ['penerimaan', 'penerimaan_void']);
+            })
+            ->leftJoin('pembayaran as pb', function ($j) {
+                $j->on('pb.id', '=', 'je.reference_id')->whereIn('je.reference_type', ['pembayaran', 'pembayaran_void']);
+            })
+            ->where('jl.account_code', self::AKUN_KAS_TUNAI)
+            ->whereNotNull('je.posted_at')
+            ->when($viharaIds !== null, fn ($q) => $q->whereIn('je.vihara_id', $viharaIds))
+            ->orderByDesc('je.entry_date')
+            ->orderByDesc('je.id')
+            ->limit(self::BATAS_MUTASI)
+            ->get([
+                'je.id as je_id', 'je.entry_date', 'je.description', 'je.reference_type', 'je.status',
+                'v.name as vihara', 'jl.debit', 'jl.credit',
+                DB::raw('COALESCE(pn.code, pb.code) as kode'),
+            ]);
+
+        return $rows->map(fn ($r) => [
+            'date' => substr((string) $r->entry_date, 0, 10),
+            'name' => $r->description,
+            'je_id' => (int) $r->je_id,
+            'kode' => $r->kode,
+            'sumber' => $r->reference_type,
+            'vihara' => $r->vihara ?? 'Tingkat yayasan',
+            'dibatalkan' => $r->status === 'cancelled',
+            'pembalik' => str_ends_with((string) $r->reference_type, '_void'),
+            'masuk' => (float) $r->debit > 0 ? number_format((float) $r->debit, 2, '.', '') : null,
+            'keluar' => (float) $r->credit > 0 ? number_format((float) $r->credit, 2, '.', '') : null,
+        ])->all();
+    }
+
+    /**
+     * Mutasi Kas Kecil terbaru per PIC — dokumen kas kecil posted milik PIC
+     * aktif, persis rumus saldo kartu Kas Kecil (topup masuk, sisanya keluar).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function mutasiKasKecil(?array $viharaIds): array
+    {
+        $rows = DB::table('petty_cash_movements as m')
+            ->join('petty_cash_pics as p', 'p.id', '=', 'm.pic_id')
+            ->leftJoin('viharas as v', 'v.id', '=', 'm.vihara_id')
+            ->where('m.status', 'posted')
+            ->where('p.active', true)
+            ->when($viharaIds !== null, fn ($q) => $q->whereIn('p.vihara_id', $viharaIds))
+            ->orderByDesc('m.movement_date')
+            ->orderByDesc('m.id')
+            ->limit(self::BATAS_MUTASI)
+            ->get([
+                'm.id', 'm.movement_date', 'm.subtype', 'm.amount', 'm.description', 'm.recipient',
+                'm.category', 'm.reference', 'p.name as pic', 'v.name as vihara',
+            ]);
+
+        return $rows->map(function ($r) {
+            $topup = $r->subtype === 'topup';
+            $ket = $topup
+                ? 'Pengisian kas kecil'.($r->description ? ' — '.$r->description : '')
+                : trim(($r->description ?: 'Pemakaian kas kecil').($r->recipient ? ' — '.$r->recipient : ''));
+
+            return [
+                'id' => (int) $r->id,
+                'date' => substr((string) $r->movement_date, 0, 10),
+                'name' => $ket,
+                'jenis' => $topup ? 'Pengisian' : 'Pemakaian',
+                'pic' => $r->pic,
+                'vihara' => $r->vihara,
+                'reference' => $r->reference,
+                'masuk' => $topup ? number_format((float) $r->amount, 2, '.', '') : null,
+                'keluar' => $topup ? null : number_format((float) $r->amount, 2, '.', ''),
+            ];
+        })->all();
     }
 
     /**

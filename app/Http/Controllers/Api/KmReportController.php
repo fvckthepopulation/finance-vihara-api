@@ -201,11 +201,14 @@ class KmReportController extends Controller
     /** Ikutkan jurnal level yayasan (vihara_id NULL). */
     private bool $includeYayasanLevel = true;
 
+    private ?\App\Models\User $scopeUser = null;
+
     private function resolveScope(Request $request): void
     {
         $this->viharaIds = ViharaScopeService::readFilterIds($request);
         $this->includeYayasanLevel = ! $request->filled('vihara_id')
             && $request->user()->canSeeYayasanLevel();
+        $this->scopeUser = $request->user();
     }
 
     /** Terapkan batas vihara ke query jurnal apa pun di controller ini. */
@@ -217,11 +220,13 @@ class KmReportController extends Controller
 
         $ids = $this->viharaIds;
         $yys = $this->includeYayasanLevel;
+        $user = $this->scopeUser;
 
-        $q->where(function ($w) use ($ids, $yys) {
+        $q->where(function ($w) use ($ids, $yys, $user) {
             $w->whereIn('journal_entries.vihara_id', $ids);
-            if ($yys) {
-                $w->orWhereNull('journal_entries.vihara_id');
+            if ($yys && $user) {
+                // Jurnal pusat hanya milik yayasan user (FV-62).
+                ViharaScopeService::orYayasanLevel($w, $user, 'journal_entries.vihara_id', 'journal_entries.entity_id');
             }
         });
     }

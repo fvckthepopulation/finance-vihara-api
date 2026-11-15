@@ -43,11 +43,23 @@ class ReconciliationController extends Controller
             ])
             // Rekonsiliasi baru tingkat yayasan (vihara_id NULL, FV-36);
             // yang lama masih menunjuk viharanya masing-masing.
+            // Rekonsiliasi tingkat yayasan hanya milik yayasan user: tabel ini
+            // tidak punya kolom yayasan, jadi dilihat dari pemilik rekeningnya
+            // (FV-62).
             ->when($viharaIds !== null, fn ($q) => $q->where(
                 fn ($w) => $w->whereIn('vihara_id', $viharaIds)
                     ->when(
                         $request->user()->canSeeYayasanLevel(),
-                        fn ($y) => $y->orWhereNull('vihara_id'),
+                        fn ($y) => $y->orWhere(fn ($z) => $z->whereNull('vihara_id')
+                            ->when(
+                                ! $request->user()->isGlobalScope(),
+                                fn ($e) => $e->whereIn(
+                                    'bank_account_id',
+                                    \App\Models\ViharaBankAccount::query()
+                                        ->select('id')
+                                        ->where('entity_id', $request->user()->entity_id ?? -1),
+                                ),
+                            )),
                     ),
             ))
             ->orderByDesc('period_month')

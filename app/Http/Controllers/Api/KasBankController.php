@@ -188,7 +188,16 @@ class KasBankController extends Controller
             ];
         })->values()->all();
 
-        return ['pics' => $rows, 'total' => number_format($total, 2, '.', '')];
+        // Akun COA kas kecil, dibaca dari bagan akun supaya kartu ikut
+        // berubah bila nama akunnya diubah (FV-73). Mutasi kas kecil selalu
+        // memakai 1110 (PettyCashController).
+        $akun = \App\Models\Account::query()->where('code', '1110')->first(['code', 'name']);
+
+        return [
+            'pics' => $rows,
+            'total' => number_format($total, 2, '.', ''),
+            'akun' => $akun ? ['code' => $akun->code, 'name' => $akun->name] : null,
+        ];
     }
 
     /** Kas tunai = penerimaan tunai − pembayaran tunai − topup kas kecil dari kas tunai (posted). */

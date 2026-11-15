@@ -30,10 +30,9 @@ class JournalEntry extends Model
      */
     public function runPostAction(User $user): void
     {
-        // Dua jalur sah menuju posted: lewat antrean (submitted), atau
-        // langsung dari draft oleh pemegang journal.create + journal.approve —
-        // sama seperti "Submit Pengeluaran" di FV-20 (FV-53).
-        if (! in_array($this->status, ['draft', 'submitted'], true)) {
+        // Jurnal manual diposting langsung dari draft oleh pemegang
+        // journal.approve (FV-68). submitted/rejected = sisa alur FV-53.
+        if (! in_array($this->status, ['draft', 'submitted', 'rejected'], true)) {
             throw new \RuntimeException("Journal entry #{$this->id} sudah diproses.");
         }
         $this->update([

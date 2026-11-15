@@ -8,6 +8,8 @@ use App\Models\Vihara;
 use App\Services\ViharaScopeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
@@ -34,6 +36,9 @@ class JurnalExportController extends Controller
 {
     private const FORMAT_RP = '#,##0';
 
+    /** Jumlah baris bukan posted dari sheet Jurnal Umum, untuk sheet Info. */
+    private int $bukanPosted = 0;
+
     public function __invoke(Request $request): StreamedResponse
     {
         $request->validate([
@@ -51,6 +56,7 @@ class JurnalExportController extends Controller
         $spreadsheet = new Spreadsheet();
         $this->sheetJurnal($spreadsheet, $request, $baris, $namaAkun);
         $this->sheetBukuBesar($spreadsheet, $baris, $namaAkun);
+        $this->sheetInfo($spreadsheet, $request, count($baris), $this->bukanPosted);
         $spreadsheet->setActiveSheetIndex(0);
 
         $namaFile = $this->namaFile($request);
@@ -74,22 +80,28 @@ class JurnalExportController extends Controller
             ->leftJoin('penerimaan as r', function ($j) {
                 $j->on('r.id', '=', 'je.reference_id')->where('je.reference_type', '=', 'penerimaan');
             })
+            ->leftJoin('users as uc', 'uc.id', '=', 'je.created_by_user_id')
+            ->leftJoin('users as up', 'up.id', '=', 'je.posted_by_user_id')
             ->select([
                 'je.id as je_id', 'je.entry_date', 'je.reference_type', 'je.description',
-                'je.status', 'v.name as vihara_name',
+                'je.status', 'je.posted_at', 'v.name as vihara_name',
                 'jl.account_code', 'jl.debit', 'jl.credit', 'jl.description as line_description',
                 DB::raw('COALESCE(p.code, r.code) as kode_transaksi'),
+                'uc.name as dibuat_oleh', 'up.name as diposting_oleh',
             ])
             ->orderBy('je.entry_date')
             ->orderBy('je.id')
             ->orderBy('jl.id');
 
-        // Jangkauan akses: jurnal tingkat yayasan ikut terlihat oleh pemegang
-        // akses yayasan ke atas, sama seperti di daftarnya.
+        // Jangkauan akses: jurnal tingkat yayasan hanya ikut bagi pemegang
+        // akses yayasan ke atas, dan hanya milik yayasannya sendiri (FV-62).
+        // Sebelumnya user tingkat vihara pun ikut menerima jurnal pusat.
         $ids = ViharaScopeService::readFilterIds($request);
         if ($ids !== null) {
-            $q->where(function ($w) use ($ids) {
-                $w->whereIn('je.vihara_id', $ids)->orWhereNull('je.vihara_id');
+            $user = $request->user();
+            $q->where(function ($w) use ($ids, $user) {
+                $w->whereIn('je.vihara_id', $ids);
+                ViharaScopeService::orYayasanLevel($w, $user, 'je.vihara_id', 'je.entity_id');
             });
         }
         if ($vihara = $request->integer('vihara_id')) {
@@ -120,74 +132,127 @@ class JurnalExportController extends Controller
         return $q->get()->all();
     }
 
+    /**
+     * Sheet "Jurnal Umum", disusun seperti Riwayat Jurnal Home Made (FV-72):
+     * judul kolom di baris 1 (langsung bisa difilter/di-pivot), Debit &
+     * Kredit tepat setelah akun supaya terlihat tanpa menggulir jauh, kolom
+     * deskripsi dibatasi lebarnya, tanggal sebagai tanggal Excel. Keterangan
+     * unduhan pindah ke sheet "Info". TOTAL hanya menjumlah jurnal posted —
+     * draft ikut tampil (bertanda di kolom Status) tetapi tidak ikut dijumlah.
+     */
     private function sheetJurnal(Spreadsheet $s, Request $request, array $baris, $namaAkun): void
     {
         $sheet = $s->getActiveSheet();
         $sheet->setTitle('Jurnal Umum');
 
-        $judul = ['Tanggal', 'No. Jurnal', 'Sumber', 'No. Transaksi', 'Vihara', 'Deskripsi Jurnal',
-            'Status', 'Kode Akun', 'Nama Akun', 'Deskripsi Baris', 'Debit', 'Kredit'];
-
-        $sheet->setCellValue('A1', 'Jurnal Umum');
-        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
-        $sheet->setCellValue('A2', $this->keteranganLingkup($request));
-        $sheet->setCellValue('A3', $this->keteranganPeriode($request));
-        $sheet->setCellValue('A4', 'Diunduh '.now()->format('d/m/Y H:i').' oleh '.($request->user()->name ?? '-'));
-
-        $barisJudul = 6;
-        // PhpSpreadsheet 5.x membuang setCellValueByColumnAndRow(); alamat
-        // selnya dirakit sendiri (A..L).
-        foreach ($judul as $i => $t) {
-            $kolom = chr(ord('A') + $i);
-            $sheet->setCellValue("{$kolom}{$barisJudul}", $t);
+        // [judul, lebar]
+        $kolom = [
+            'A' => ['Tanggal', 12], 'B' => ['No. Jurnal', 11], 'C' => ['No. Transaksi', 15],
+            'D' => ['Kode Akun', 10], 'E' => ['Nama Akun', 32], 'F' => ['Debit', 15], 'G' => ['Kredit', 15],
+            'H' => ['Deskripsi Baris', 60], 'I' => ['Deskripsi Jurnal', 60], 'J' => ['Sumber', 13],
+            'K' => ['Vihara', 28], 'L' => ['Status', 10], 'M' => ['Dibuat oleh', 20], 'N' => ['Diposting oleh', 20],
+        ];
+        foreach ($kolom as $huruf => [$judul, $lebar]) {
+            $sheet->setCellValue("{$huruf}1", $judul);
+            $sheet->getColumnDimension($huruf)->setWidth($lebar);
         }
-        $sheet->getStyle("A{$barisJudul}:L{$barisJudul}")->getFont()->setBold(true);
-        $sheet->getStyle("A{$barisJudul}:L{$barisJudul}")->getFill()
+        $sheet->getStyle('A1:N1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:N1')->getFill()
             ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('EFE7DD');
 
-        $r = $barisJudul + 1;
+        $r = 2;
         $totalDebit = 0.0;
         $totalKredit = 0.0;
+        $bukanPosted = 0;
         foreach ($baris as $b) {
             $debit = (float) $b->debit;
             $kredit = (float) $b->credit;
-            $totalDebit += $debit;
-            $totalKredit += $kredit;
+            if (self::terposting($b)) {
+                $totalDebit += $debit;
+                $totalKredit += $kredit;
+            } else {
+                $bukanPosted++;
+            }
 
-            $sheet->setCellValue("A{$r}", date('d/m/Y', strtotime($b->entry_date)));
+            $sheet->setCellValue("A{$r}", ExcelDate::PHPToExcel(new \DateTimeImmutable(substr((string) $b->entry_date, 0, 10))));
             $sheet->setCellValue("B{$r}", 'JE-'.$b->je_id);
-            $sheet->setCellValue("C{$r}", $b->reference_type ?? 'manual');
-            $sheet->setCellValue("D{$r}", $b->kode_transaksi ?? '');
-            $sheet->setCellValue("E{$r}", $b->vihara_name ?? 'Tingkat yayasan');
-            $sheet->setCellValue("F{$r}", $b->description);
-            $sheet->setCellValue("G{$r}", $b->status);
-            $sheet->setCellValueExplicit("H{$r}", (string) $b->account_code,
-                \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-            $sheet->setCellValue("I{$r}", $namaAkun[$b->account_code] ?? '');
-            $sheet->setCellValue("J{$r}", $b->line_description);
-            $sheet->setCellValue("K{$r}", $debit);
-            $sheet->setCellValue("L{$r}", $kredit);
+            $sheet->setCellValue("C{$r}", $b->kode_transaksi ?? '');
+            $sheet->setCellValueExplicit("D{$r}", (string) $b->account_code, DataType::TYPE_STRING);
+            $sheet->setCellValue("E{$r}", $namaAkun[$b->account_code] ?? '');
+            $sheet->setCellValue("F{$r}", $debit);
+            $sheet->setCellValue("G{$r}", $kredit);
+            $sheet->setCellValue("H{$r}", $b->line_description);
+            $sheet->setCellValue("I{$r}", $b->description);
+            $sheet->setCellValue("J{$r}", $b->reference_type ?? 'manual');
+            $sheet->setCellValue("K{$r}", $b->vihara_name ?? 'Tingkat yayasan');
+            $sheet->setCellValue("L{$r}", $b->status);
+            $sheet->setCellValue("M{$r}", $b->dibuat_oleh ?? '');
+            $sheet->setCellValue("N{$r}", $b->diposting_oleh ?? '');
             $r++;
         }
+        $barisAkhirData = $r - 1;
 
         if ($baris === []) {
             $sheet->setCellValue("A{$r}", 'Tidak ada data untuk filter ini.');
             $r++;
         }
 
-        $sheet->setCellValue("J{$r}", 'Total');
-        $sheet->setCellValue("K{$r}", $totalDebit);
-        $sheet->setCellValue("L{$r}", $totalKredit);
-        $sheet->getStyle("J{$r}:L{$r}")->getFont()->setBold(true);
-
-        $sheet->getStyle("K{$barisJudul}:L{$r}")->getNumberFormat()->setFormatCode(self::FORMAT_RP);
-        $sheet->getStyle("K{$barisJudul}:L{$r}")->getAlignment()
-            ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-
-        foreach (range('A', 'L') as $kolom) {
-            $sheet->getColumnDimension($kolom)->setAutoSize(true);
+        $sheet->setCellValue("E{$r}", 'TOTAL (Terposting)');
+        $sheet->setCellValue("F{$r}", $totalDebit);
+        $sheet->setCellValue("G{$r}", $totalKredit);
+        $sheet->getStyle("E{$r}:G{$r}")->getFont()->setBold(true);
+        if ($bukanPosted > 0) {
+            $sheet->setCellValue("H{$r}", "{$bukanPosted} baris belum diposting (mis. draft) tidak ikut dijumlah.");
+            $sheet->getStyle("H{$r}")->getFont()->setItalic(true);
         }
-        $sheet->freezePane('A'.($barisJudul + 1));
+
+        $sheet->getStyle("A2:A{$r}")->getNumberFormat()->setFormatCode('dd/mm/yyyy');
+        $sheet->getStyle("F2:G{$r}")->getNumberFormat()->setFormatCode(self::FORMAT_RP);
+        $sheet->getStyle("F2:G{$r}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+        $sheet->getStyle("H2:I{$r}")->getAlignment()->setWrapText(true);
+        $sheet->getStyle("A2:N{$r}")->getAlignment()->setVertical(Alignment::VERTICAL_TOP);
+
+        $sheet->freezePane('A2');
+        if ($baris !== []) {
+            $sheet->setAutoFilter("A1:N{$barisAkhirData}");
+        }
+
+        $this->bukanPosted = $bukanPosted;
+    }
+
+    /**
+     * Jurnal yang masuk buku besar: sudah diposting. Jurnal yang dibatalkan
+     * (status cancelled) tetap terposting dan diimbangi jurnal pembaliknya —
+     * aturan yang sama dengan laporan keuangan (posted_at terisi).
+     */
+    private static function terposting(object $b): bool
+    {
+        return $b->posted_at !== null;
+    }
+
+    /** Keterangan unduhan, dipisah dari tabel supaya tabel mulai di baris 1. */
+    private function sheetInfo(Spreadsheet $s, Request $request, int $jumlahBaris, int $bukanPosted): void
+    {
+        $sheet = $s->createSheet();
+        $sheet->setTitle('Info');
+        $isi = [
+            ['Jurnal Umum', ''],
+            ['Lingkup', $this->keteranganLingkup($request)],
+            ['Periode', $this->keteranganPeriode($request)],
+            ['Diunduh', now()->format('d/m/Y H:i').' oleh '.($request->user()->name ?? '-')],
+            ['Jumlah baris', (string) $jumlahBaris],
+            ['Catatan', $bukanPosted > 0
+                ? "TOTAL di sheet Jurnal Umum dan sheet Buku Besar hanya menjumlah jurnal terposting (sama dengan laporan keuangan); {$bukanPosted} baris belum diposting (mis. draft) ditampilkan tetapi tidak dijumlah. Jurnal yang dibatalkan tetap dihitung bersama jurnal pembaliknya, sehingga saling meniadakan."
+                : 'TOTAL di sheet Jurnal Umum dan sheet Buku Besar menjumlah jurnal terposting (sama dengan laporan keuangan). Jurnal yang dibatalkan dihitung bersama jurnal pembaliknya, sehingga saling meniadakan.'],
+        ];
+        foreach ($isi as $i => [$a, $b]) {
+            $sheet->setCellValue('A'.($i + 1), $a);
+            $sheet->setCellValue('B'.($i + 1), $b);
+        }
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+        $sheet->getStyle('A2:A6')->getFont()->setBold(true);
+        $sheet->getColumnDimension('A')->setWidth(16);
+        $sheet->getColumnDimension('B')->setWidth(90);
     }
 
     /** Sheet kedua: rekap per akun (saldo awal selalu 0 — lihat catatan). */
@@ -198,6 +263,10 @@ class JurnalExportController extends Controller
 
         $per = [];
         foreach ($baris as $b) {
+            // Buku besar hanya berisi jurnal terposting; draft tidak (FV-72).
+            if (! self::terposting($b)) {
+                continue;
+            }
             $kode = (string) $b->account_code;
             $per[$kode] ??= ['debit' => 0.0, 'kredit' => 0.0];
             $per[$kode]['debit'] += (float) $b->debit;
@@ -207,7 +276,7 @@ class JurnalExportController extends Controller
 
         $sheet->setCellValue('A1', 'Buku Besar — rekap per akun');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
-        $sheet->setCellValue('A2', 'Mutasi dalam rentang yang sama dengan sheet Jurnal Umum.');
+        $sheet->setCellValue('A2', 'Mutasi jurnal terposting dalam rentang yang sama dengan sheet Jurnal Umum (draft tidak dihitung).');
 
         foreach (['A4' => 'Kode Akun', 'B4' => 'Nama Akun', 'C4' => 'Debit', 'D4' => 'Kredit', 'E4' => 'Mutasi Bersih'] as $sel => $t) {
             $sheet->setCellValue($sel, $t);

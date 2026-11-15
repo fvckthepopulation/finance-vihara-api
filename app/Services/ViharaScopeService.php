@@ -32,12 +32,15 @@ class ViharaScopeService
      * @param  string  $column  Kolom vihara pada query (mis. 'je.vihara_id').
      * @param  bool  $includeYayasanLevel  Ikutkan baris vihara_id NULL bagi
      *                                     user yang berhak (jurnal pusat).
+     * @param  string|null  $entityColumn  Kolom yayasan pada query; default
+     *                                     diturunkan dari $column (…vihara_id → …entity_id).
      */
     public static function applyScope(
         $query,
         Request $request,
         string $column = 'vihara_id',
         bool $includeYayasanLevel = false,
+        ?string $entityColumn = null,
     ): void {
         $user = $request->user();
         $requested = self::requestedViharaId($request);
@@ -57,16 +60,58 @@ class ViharaScopeService
             return;
         }
 
-        $seesYayasanLevel = $includeYayasanLevel && $user->canSeeYayasanLevel();
+        $entityColumn ??= self::entityColumnFor($column);
 
-        $query->where(function ($q) use ($column, $allowed, $seesYayasanLevel) {
+        $query->where(function ($q) use ($column, $allowed, $includeYayasanLevel, $user, $entityColumn) {
             // whereIn([]) menghasilkan kondisi selalu-salah — itu memang
             // yang kita mau untuk user tanpa vihara ter-assign.
             $q->whereIn($column, $allowed);
-            if ($seesYayasanLevel) {
-                $q->orWhereNull($column);
+            if ($includeYayasanLevel) {
+                self::orYayasanLevel($q, $user, $column, $entityColumn);
             }
         });
+    }
+
+    /**
+     * Tambahkan "OR baris tingkat yayasan milik yayasan user" ke sebuah
+     * kondisi (FV-62). Baris tingkat yayasan = vihara kosong; tanpa syarat
+     * yayasan, jurnal pusat yayasan LAIN ikut terbaca. User global melihat
+     * semua yayasan; user vihara tidak pernah melihat baris tingkat yayasan.
+     */
+    public static function orYayasanLevel($query, User $user, string $viharaColumn, ?string $entityColumn): void
+    {
+        if (! $user->canSeeYayasanLevel()) {
+            return;
+        }
+
+        $query->orWhere(function ($y) use ($user, $viharaColumn, $entityColumn) {
+            $y->whereNull($viharaColumn);
+            if (! $user->isGlobalScope()) {
+                if ($entityColumn === null || $user->entity_id === null) {
+                    // Tidak bisa memastikan yayasannya → jangan tampilkan.
+                    $y->whereRaw('1 = 0');
+                } else {
+                    $y->where($entityColumn, $user->entity_id);
+                }
+            }
+        });
+    }
+
+    /**
+     * Yayasan yang barisnya boleh dibaca pada tingkat yayasan: id yayasan
+     * user, atau null untuk user global (semua yayasan).
+     */
+    public static function yayasanLevelEntityId(User $user): ?int
+    {
+        return $user->isGlobalScope() ? null : ($user->entity_id !== null ? (int) $user->entity_id : -1);
+    }
+
+    /** 'je.vihara_id' → 'je.entity_id'; 'vihara_id' → 'entity_id'. */
+    private static function entityColumnFor(string $viharaColumn): ?string
+    {
+        return str_ends_with($viharaColumn, 'vihara_id')
+            ? substr($viharaColumn, 0, -strlen('vihara_id')).'entity_id'
+            : null;
     }
 
     /**
@@ -155,9 +200,14 @@ class ViharaScopeService
     }
 
     /** Guard akses satu record milik vihara tertentu (show/update/delete). */
-    public static function guardRecord(Request $request, ?int $recordViharaId): void
+    public static function guardRecord(Request $request, ?int $recordViharaId, ?int $recordEntityId = null): void
     {
         self::assertCanAccess($request->user(), $recordViharaId);
+
+        // Baris tingkat yayasan: pastikan milik yayasan user (FV-62).
+        if ($recordViharaId === null && $recordEntityId !== null) {
+            self::guardEntity($request, $recordEntityId);
+        }
     }
 
     /**

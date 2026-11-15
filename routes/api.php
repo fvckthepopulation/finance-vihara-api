@@ -282,12 +282,11 @@ Route::middleware(['auth:sanctum', 'user.aktif'])->group(function () {
     Route::post('/journal-entries', [ManualJournalController::class, 'store'])->middleware('can:journal.create');
     Route::get('/journal-entries/{journalEntry}', [ManualJournalController::class, 'show'])->middleware('can:journal.view');
     Route::delete('/journal-entries/{journalEntry}', [ManualJournalController::class, 'destroy'])->middleware('can:journal.create');
-    // Siklus persetujuan jurnal manual (FV-53). Mengajukan butuh izin
-    // mencatat; menyetujui/menolak butuh izin menyetujui — dua pasang mata,
-    // sama seperti pembayaran dan penerimaan.
-    Route::post('/journal-entries/{journalEntry}/submit', [ManualJournalController::class, 'submit'])->middleware('can:journal.create');
+    // Jurnal manual tanpa pengajuan/persetujuan (FV-68, mengganti FV-53):
+    // journal.create menyimpan/mengubah draft, journal.approve ("Posting
+    // jurnal manual") memposting — dari form (posting: true) atau dari daftar.
+    Route::put('/journal-entries/{journalEntry}', [ManualJournalController::class, 'update'])->middleware('can:journal.create');
     Route::post('/journal-entries/{journalEntry}/post', [ManualJournalController::class, 'post'])->middleware('can:journal.approve');
-    Route::post('/journal-entries/{journalEntry}/reject', [ManualJournalController::class, 'reject'])->middleware('can:journal.approve');
     Route::post('/journal-entries/{journalEntry}/void', [ManualJournalController::class, 'void'])->middleware('can:journal.void');
 
     // --- Yayasan (entity) CRUD — puncak hirarki tenant ---

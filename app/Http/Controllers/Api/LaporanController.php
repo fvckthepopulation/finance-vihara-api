@@ -89,7 +89,10 @@ class LaporanController extends Controller
 
         [$mode, $year, $month, $startD, $endD, $beforeD] = $this->resolvePeriod($data);
 
-        $report = $this->buildReport(self::filterViharas($viharaIds, $includeYayasan), $startD, $endD, $beforeD);
+        $report = $this->buildReport(
+            self::filterViharas($viharaIds, $includeYayasan, ViharaScopeService::yayasanLevelEntityId($request->user())),
+            $startD, $endD, $beforeD,
+        );
 
         return response()->json([
             'period' => [
@@ -125,52 +128,102 @@ class LaporanController extends Controller
             'mode' => ['sometimes', 'in:ytd,bulan'],
             'year' => ['sometimes', 'integer', 'min:2000', 'max:2100'],
             'month' => ['required_if:mode,bulan', 'integer', 'min:1', 'max:12'],
+            // Kosong = semua yayasan dalam jangkauan akun (FV-63).
+            'entity_id' => ['sometimes', 'nullable', 'integer', 'exists:entities,id'],
         ]);
 
         [$mode, $year, $month, $startD, $endD, $beforeD] = $this->resolvePeriod($data);
 
+        $user = $request->user();
+
+        // Yayasan yang boleh dipilih: user global = semua, user scope entity
+        // = yayasannya sendiri saja.
+        $pilihan = Entity::query()
+            ->when(! $user->isGlobalScope(), fn ($q) => $q->where('id', $user->entity_id ?? -1))
+            ->orderBy('code')
+            ->get(['id', 'code', 'legal_name']);
+
+        $entityId = isset($data['entity_id']) ? (int) $data['entity_id'] : null;
+        if ($entityId !== null && ! $pilihan->contains('id', $entityId)) {
+            return response()->json(['message' => 'Anda tidak memiliki akses ke yayasan tersebut.'], 403);
+        }
+        $dipilih = $entityId !== null ? $pilihan->where('id', $entityId)->values() : $pilihan;
+
+        // Vihara yang boleh dilihat user, dikelompokkan per yayasan.
+        $viharas = ViharaScopeService::visibleViharasQuery($user)
+            ->when($entityId !== null, fn ($q) => $q->where('entity_id', $entityId))
+            ->orderBy('code')
+            ->get()
+            ->groupBy(fn ($v) => (int) ($v->entity_id ?? 0));
+
+        $perYayasan = [];
         $perVihara = [];
         $totals = null;
 
-        // Identitas yayasan untuk header laporan. User scope entity pakai
-        // yayasannya sendiri; scope global pakai yayasan pertama.
-        $yayasan = $request->user()->entity_id !== null
-            ? Entity::find($request->user()->entity_id)
-            : Entity::query()->orderBy('id')->first();
-
-        // Hanya vihara yang boleh dilihat user (scope entity = sebatas
-        // yayasannya; scope global = semua).
-        $viharas = ViharaScopeService::visibleViharasQuery($request->user())
-            ->orderBy('code')
-            ->get();
-
-        foreach ($viharas as $vihara) {
-            $raw = $this->buildReport(self::filterViharas([(int) $vihara->id]), $startD, $endD, $beforeD)['raw'];
-            $perVihara[] = $this->konsolidasiEntry([
-                'id' => (int) $vihara->id,
-                'code' => $vihara->code,
-                'name' => $vihara->name,
-                // Tabel viharas hanya punya `address` (alamat lengkap),
-                // tidak ada kolom kota tersendiri → null.
-                'kota' => null,
-            ], $raw);
-            $totals = $this->accumulateRaw($totals, $raw);
+        $kelompok = $dipilih->map(fn ($e) => ['id' => (int) $e->id, 'code' => $e->code, 'nama' => $e->legal_name])->all();
+        // Data tanpa yayasan (vihara/jurnal pusat lama tanpa entity) hanya
+        // terlihat oleh user global saat "Semua yayasan" — supaya total
+        // gabungan tetap sama dengan Laporan Keuangan tanpa filter.
+        if ($entityId === null && $user->isGlobalScope()) {
+            $kelompok[] = ['id' => 0, 'code' => '-', 'nama' => 'Tanpa yayasan'];
         }
 
-        // Jurnal level yayasan (je.vihara_id NULL) — tampil sebagai entitas
-        // "Kantor Yayasan" hanya bila ada nilai ≠ 0.
-        $yysRaw = $this->buildReport(self::filterYayasanOnly(), $startD, $endD, $beforeD)['raw'];
-        if ($this->rawHasValue($yysRaw)) {
-            $perVihara[] = $this->konsolidasiEntry([
-                'id' => null,
-                'code' => 'YYS',
-                'name' => 'Kantor Yayasan',
-                'kota' => null,
-            ], $yysRaw);
-            $totals = $this->accumulateRaw($totals, $yysRaw);
+        foreach ($kelompok as $yys) {
+            $baris = [];
+            $subtotal = null;
+
+            foreach ($viharas->get($yys['id'], collect()) as $vihara) {
+                $raw = $this->buildReport(self::filterViharas([(int) $vihara->id]), $startD, $endD, $beforeD)['raw'];
+                $baris[] = $this->konsolidasiEntry([
+                    'id' => (int) $vihara->id,
+                    'code' => $vihara->code,
+                    'name' => $vihara->name,
+                    // Tabel viharas hanya punya `address` (alamat lengkap),
+                    // tidak ada kolom kota tersendiri → null.
+                    'kota' => null,
+                    'yayasan_code' => $yys['code'],
+                ], $raw);
+                $subtotal = $this->accumulateRaw($subtotal, $raw);
+            }
+
+            // Jurnal level yayasan (je.vihara_id NULL) milik yayasan ini —
+            // tampil sebagai "Kantor Yayasan" hanya bila ada nilai ≠ 0.
+            // User scope entity tetap dibatasi yayasannya sendiri (FV-62).
+            $yysRaw = $this->buildReport(self::filterYayasanOnly($yys['id']), $startD, $endD, $beforeD)['raw'];
+            if ($this->rawHasValue($yysRaw)) {
+                $baris[] = $this->konsolidasiEntry([
+                    'id' => null,
+                    'code' => 'YYS',
+                    'name' => 'Kantor Yayasan',
+                    'kota' => null,
+                    'yayasan_code' => $yys['code'],
+                ], $yysRaw);
+                $subtotal = $this->accumulateRaw($subtotal, $yysRaw);
+            }
+
+            if ($baris === [] && $yys['id'] === 0) {
+                continue; // tidak ada data tanpa yayasan — jangan tampilkan kelompok kosong
+            }
+
+            $perYayasan[] = [
+                'yayasan' => $yys,
+                'per_vihara' => $baris,
+                'subtotal' => $subtotal === null ? null : $this->konsolidasiEntry(null, $subtotal),
+            ];
+            $perVihara = array_merge($perVihara, $baris);
+            if ($subtotal !== null) {
+                $totals = $this->accumulateRaw($totals, $subtotal);
+            }
         }
 
-        $konsolidasi = $this->konsolidasiEntry(null, $totals);
+        $konsolidasi = $totals === null ? null : $this->konsolidasiEntry(null, $totals);
+
+        // Identitas untuk judul: satu yayasan → namanya; beberapa → digabung
+        // (mis. "YP + YVG"), bukan lagi yayasan pertama di database.
+        $judul = collect($perYayasan)->pluck('yayasan')->where('id', '>', 0)->values();
+        if ($judul->isEmpty()) {
+            $judul = collect($kelompok)->where('id', '>', 0)->values();
+        }
 
         return response()->json([
             'period' => [
@@ -181,10 +234,13 @@ class LaporanController extends Controller
                 'end' => $endD,
             ],
             'yayasan' => [
-                // Multi-yayasan: ambil dari entity user, bukan hardcode.
-                'nama' => $yayasan?->legal_name ?? 'Yayasan',
-                'singkatan' => $yayasan?->code ?? '-',
+                'nama' => $judul->isEmpty() ? 'Yayasan' : $judul->pluck('nama')->implode(' + '),
+                'singkatan' => $judul->isEmpty() ? '-' : $judul->pluck('code')->implode(' + '),
+                'jumlah' => $judul->count(),
             ],
+            'entity_id' => $entityId,
+            'yayasan_pilihan' => $pilihan->map(fn ($e) => ['id' => (int) $e->id, 'code' => $e->code, 'nama' => $e->legal_name])->values(),
+            'per_yayasan' => $perYayasan,
             'per_vihara' => $perVihara,
             'konsolidasi' => $konsolidasi,
         ]);
@@ -585,37 +641,54 @@ class LaporanController extends Controller
      *   ids []     = tidak ada vihara; dipadu yayasan=true menghasilkan
      *                "hanya jurnal level yayasan"
      *   yayasan    = ikutkan baris je.vihara_id NULL
+     *   entity     = baris tingkat yayasan dibatasi ke yayasan ini (FV-62);
+     *                null = semua yayasan (user global)
      *
-     * @param  array{ids: ?array<int, int>, yayasan: bool}  $viharaFilter
+     * @param  array{ids: ?array<int, int>, yayasan: bool, entity: ?int}  $viharaFilter
      */
     private function applyViharaFilter($query, array $viharaFilter): void
     {
         $ids = $viharaFilter['ids'];
+        $includeYayasan = $viharaFilter['yayasan'];
+        $entity = $viharaFilter['entity'] ?? null;
 
         if ($ids === null) {
+            // Tanpa batas vihara (user global) — tetap hormati batas yayasan
+            // bila diminta.
+            if ($entity !== null) {
+                $query->where('je.entity_id', $entity);
+            }
+
             return;
         }
 
-        $includeYayasan = $viharaFilter['yayasan'];
-
-        $query->where(function ($q) use ($ids, $includeYayasan) {
+        $query->where(function ($q) use ($ids, $includeYayasan, $entity) {
             $q->whereIn('je.vihara_id', $ids);
             if ($includeYayasan) {
-                $q->orWhereNull('je.vihara_id');
+                // Jurnal pusat hanya milik yayasan yang sedang dilihat;
+                // tanpa syarat ini jurnal pusat yayasan lain ikut terbaca.
+                $q->orWhere(function ($y) use ($entity) {
+                    $y->whereNull('je.vihara_id');
+                    if ($entity === 0) {
+                        $y->whereNull('je.entity_id'); // jurnal pusat tanpa yayasan (data lama)
+                    } elseif ($entity !== null) {
+                        $y->where('je.entity_id', $entity);
+                    }
+                });
             }
         });
     }
 
-    /** @return array{ids: ?array<int, int>, yayasan: bool} */
-    private static function filterViharas(?array $ids, bool $includeYayasan = false): array
+    /** @return array{ids: ?array<int, int>, yayasan: bool, entity: ?int} */
+    private static function filterViharas(?array $ids, bool $includeYayasan = false, ?int $entity = null): array
     {
-        return ['ids' => $ids, 'yayasan' => $includeYayasan];
+        return ['ids' => $ids, 'yayasan' => $includeYayasan, 'entity' => $includeYayasan ? $entity : null];
     }
 
-    /** @return array{ids: ?array<int, int>, yayasan: bool} */
-    private static function filterYayasanOnly(): array
+    /** @return array{ids: ?array<int, int>, yayasan: bool, entity: ?int} */
+    private static function filterYayasanOnly(?int $entity = null): array
     {
-        return ['ids' => [], 'yayasan' => true];
+        return ['ids' => [], 'yayasan' => true, 'entity' => $entity];
     }
 
     /**

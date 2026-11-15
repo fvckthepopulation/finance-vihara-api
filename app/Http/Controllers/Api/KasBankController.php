@@ -320,15 +320,17 @@ class KasBankController extends Controller
             ->orderByDesc('m.id')
             ->limit(self::BATAS_MUTASI)
             ->get([
-                'm.id', 'm.movement_date', 'm.subtype', 'm.amount', 'm.description', 'm.recipient',
+                'm.id', 'm.movement_date', 'm.subtype', 'm.amount', 'm.name as nama', 'm.description', 'm.notes',
                 'm.category', 'm.reference', 'p.name as pic', 'v.name as vihara',
             ]);
 
         return $rows->map(function ($r) {
             $topup = $r->subtype === 'topup';
+            // Penggunaan: Nama Pengeluaran dari master (FV-82); mutasi lama
+            // memakai keterangan keperluannya.
             $ket = $topup
-                ? 'Pengisian kas kecil'.($r->description ? ' — '.$r->description : '')
-                : trim(($r->description ?: 'Pemakaian kas kecil').($r->recipient ? ' — '.$r->recipient : ''));
+                ? 'Pengisian kas kecil'.($r->notes ? ' — '.$r->notes : '')
+                : ($r->nama ?: ($r->description ?: 'Pemakaian kas kecil'));
 
             return [
                 'id' => (int) $r->id,

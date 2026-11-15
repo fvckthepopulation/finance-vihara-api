@@ -58,7 +58,14 @@ class VoidService
             abort(422, "{$label} ini tidak punya jurnal, jadi tidak ada yang bisa dibalik.");
         }
 
-        $tanggal = $record instanceof JournalEntry ? $record->entry_date : $record->date;
+        // Kas kecil menyimpan tanggalnya di movement_date. Dulu ikut dibaca
+        // dari `date` (null), sehingga membatalkan mutasi kas kecil selalu
+        // gagal dengan galat server.
+        $tanggal = match (true) {
+            $record instanceof JournalEntry => $record->entry_date,
+            $record instanceof \App\Models\PettyCashMovement => $record->movement_date,
+            default => $record->date,
+        };
 
         // Periode terkunci = buku sudah ditutup. Melemparnya ke sini supaya
         // pesannya jelas, bukan gagal di tengah transaksi database.
@@ -71,7 +78,11 @@ class VoidService
                 PelepasanPembatasanService::balikkan($record, $user, $reason);
             }
             $kode = $record->code ?? "JE#{$asal->id}";
-            $desc = "Pembalik {$kode} — {$reason}";
+            // Kas kecil tidak punya nomor dokumen; pembaliknya menyebut
+            // keperluan yang sama dengan jurnal aslinya (FV-87).
+            $desc = $record instanceof \App\Models\PettyCashMovement
+                ? \App\Models\PettyCashMovement::deskripsiPembalik((string) $asal->description, $reason)
+                : "Pembalik {$kode} — {$reason}";
 
             $pembalik = JournalEntry::create([
                 'entity_id' => $asal->entity_id,

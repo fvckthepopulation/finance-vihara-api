@@ -111,7 +111,11 @@ class PembayaranController extends Controller
                     ->where('active', true),
             ],
             'name' => [
-                'sometimes', 'nullable', 'string', 'max:255',
+                // Wajib untuk transaksi yang langsung diajukan/diposting
+                // (FV-79); draft boleh belum lengkap.
+                Rule::requiredIf(fn () => ! $draft && \App\Models\TransactionName::adaUntuk(
+                    'pengeluaran', $request->input('category'), $request->filled('vihara_id') ? $request->integer('vihara_id') : null,
+                )), 'nullable', 'string', 'max:255',
                 // Nama Pengeluaran harus terdaftar di master, sesuai
                 // kategorinya. Pada draft tanpa kategori, pencocokan ini
                 // dilewati — belum ada kategori untuk dicocokkan.
@@ -131,6 +135,7 @@ class PembayaranController extends Controller
             'description' => ['sometimes', 'nullable', 'string'],
         ], [
             'bank_account_id.required' => 'Transfer dari Rekening wajib dipilih.',
+            'name.required' => 'Nama Pengeluaran wajib dipilih.',
         ]);
 
         $data['vihara_id'] = ViharaScopeService::creationViharaId($request);
@@ -380,10 +385,26 @@ class PembayaranController extends Controller
     ];
 
     /** @return string[] nama field yang masih kosong */
+    /**
+     * Kolom wajib sebelum diajukan/diposting. Nama Pengeluaran ikut wajib bila
+     * kategorinya punya pilihan nama di master untuk vihara itu (FV-79).
+     *
+     * @return array<string, string>
+     */
+    private function wajibLengkap(Pembayaran $p): array
+    {
+        $wajib = self::WAJIB_LENGKAP;
+        if (\App\Models\TransactionName::adaUntuk('pengeluaran', $p->category, $p->vihara_id)) {
+            $wajib['name'] = 'Nama Pengeluaran';
+        }
+
+        return $wajib;
+    }
+
     private function kelengkapanKurang(Pembayaran $p): array
     {
         $kurang = [];
-        foreach (self::WAJIB_LENGKAP as $kolom => $label) {
+        foreach ($this->wajibLengkap($p) as $kolom => $label) {
             if ($p->{$kolom} === null || $p->{$kolom} === '' || $p->{$kolom} == 0) {
                 $kurang[] = $label;
             }
@@ -488,7 +509,7 @@ class PembayaranController extends Controller
     /** POST /api/pembayaran/{id}/submit — ajukan draft ke persetujuan. */
     public function submit(Request $request, Pembayaran $pembayaran): JsonResponse
     {
-        return $this->ajukan($request, $pembayaran, 'pengeluaran', self::WAJIB_LENGKAP);
+        return $this->ajukan($request, $pembayaran, 'pengeluaran', $this->wajibLengkap($pembayaran));
     }
 
     /** POST /api/pembayaran/{id}/reject — tolak pengajuan, dengan alasan. */

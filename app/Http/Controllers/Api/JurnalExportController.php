@@ -149,15 +149,15 @@ class JurnalExportController extends Controller
         $kolom = [
             'A' => ['Tanggal', 12], 'B' => ['No. Jurnal', 11], 'C' => ['No. Transaksi', 15],
             'D' => ['Kode Akun', 10], 'E' => ['Nama Akun', 32], 'F' => ['Debit', 15], 'G' => ['Kredit', 15],
-            'H' => ['Deskripsi Baris', 60], 'I' => ['Deskripsi Jurnal', 60], 'J' => ['Sumber', 13],
-            'K' => ['Vihara', 28], 'L' => ['Status', 10], 'M' => ['Dibuat oleh', 20], 'N' => ['Diposting oleh', 20],
+            'H' => ['Deskripsi', 70], 'I' => ['Sumber', 13],
+            'J' => ['Vihara', 28], 'K' => ['Status', 10], 'L' => ['Dibuat oleh', 20], 'M' => ['Diposting oleh', 20],
         ];
         foreach ($kolom as $huruf => [$judul, $lebar]) {
             $sheet->setCellValue("{$huruf}1", $judul);
             $sheet->getColumnDimension($huruf)->setWidth($lebar);
         }
-        $sheet->getStyle('A1:N1')->getFont()->setBold(true);
-        $sheet->getStyle('A1:N1')->getFill()
+        $sheet->getStyle('A1:M1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:M1')->getFill()
             ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('EFE7DD');
 
         $r = 2;
@@ -181,13 +181,15 @@ class JurnalExportController extends Controller
             $sheet->setCellValue("E{$r}", $namaAkun[$b->account_code] ?? '');
             $sheet->setCellValue("F{$r}", $debit);
             $sheet->setCellValue("G{$r}", $kredit);
-            $sheet->setCellValue("H{$r}", $b->line_description);
-            $sheet->setCellValue("I{$r}", $b->description);
-            $sheet->setCellValue("J{$r}", $b->reference_type ?? 'manual');
-            $sheet->setCellValue("K{$r}", $b->vihara_name ?? 'Tingkat yayasan');
-            $sheet->setCellValue("L{$r}", $b->status);
-            $sheet->setCellValue("M{$r}", $b->dibuat_oleh ?? '');
-            $sheet->setCellValue("N{$r}", $b->diposting_oleh ?? '');
+            // Satu kolom deskripsi: keterangan baris bila diisi (jurnal manual
+            // bisa berbeda per baris), selain itu keterangan jurnalnya. Untuk
+            // jurnal transaksi keduanya sama, jadi dua kolom hanya mengulang.
+            $sheet->setCellValue("H{$r}", self::deskripsi($b));
+            $sheet->setCellValue("I{$r}", $b->reference_type ?? 'manual');
+            $sheet->setCellValue("J{$r}", $b->vihara_name ?? 'Tingkat yayasan');
+            $sheet->setCellValue("K{$r}", $b->status);
+            $sheet->setCellValue("L{$r}", $b->dibuat_oleh ?? '');
+            $sheet->setCellValue("M{$r}", $b->diposting_oleh ?? '');
             $r++;
         }
         $barisAkhirData = $r - 1;
@@ -209,15 +211,23 @@ class JurnalExportController extends Controller
         $sheet->getStyle("A2:A{$r}")->getNumberFormat()->setFormatCode('dd/mm/yyyy');
         $sheet->getStyle("F2:G{$r}")->getNumberFormat()->setFormatCode(self::FORMAT_RP);
         $sheet->getStyle("F2:G{$r}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-        $sheet->getStyle("H2:I{$r}")->getAlignment()->setWrapText(true);
-        $sheet->getStyle("A2:N{$r}")->getAlignment()->setVertical(Alignment::VERTICAL_TOP);
+        $sheet->getStyle("H2:H{$r}")->getAlignment()->setWrapText(true);
+        $sheet->getStyle("A2:M{$r}")->getAlignment()->setVertical(Alignment::VERTICAL_TOP);
 
         $sheet->freezePane('A2');
         if ($baris !== []) {
-            $sheet->setAutoFilter("A1:N{$barisAkhirData}");
+            $sheet->setAutoFilter("A1:M{$barisAkhirData}");
         }
 
         $this->bukanPosted = $bukanPosted;
+    }
+
+    /** Keterangan baris bila diisi, selain itu keterangan jurnalnya. */
+    private static function deskripsi(object $b): string
+    {
+        $baris = trim((string) ($b->line_description ?? ''));
+
+        return $baris !== '' ? $baris : (string) ($b->description ?? '');
     }
 
     /**

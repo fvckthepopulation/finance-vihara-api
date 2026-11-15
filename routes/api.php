@@ -179,6 +179,8 @@ Route::middleware(['auth:sanctum', 'user.aktif'])->group(function () {
     Route::get('/petty-cash/summary', [PettyCashController::class, 'summary'])->middleware('can:petty_cash.view');
     Route::post('/petty-cash', [PettyCashController::class, 'store'])->middleware('can:petty_cash.declare');
     Route::get('/petty-cash/{pettyCashMovement}', [PettyCashController::class, 'show'])->middleware('can:petty_cash.view');
+    // Ubah draft kas kecil (FV-81).
+    Route::put('/petty-cash/{pettyCashMovement}', [PettyCashController::class, 'update'])->middleware('can:petty_cash.declare');
     Route::post('/petty-cash/{pettyCashMovement}/post', [PettyCashController::class, 'post'])->middleware('can:petty_cash.approve');
     Route::post('/petty-cash/{pettyCashMovement}/attachment', [PettyCashController::class, 'uploadAttachment'])->middleware('can:petty_cash.declare');
     Route::get('/petty-cash/{pettyCashMovement}/attachment', [PettyCashController::class, 'downloadAttachment'])->middleware('can:petty_cash.view');

@@ -85,6 +85,31 @@ class TransactionName extends Model
      * pemeriksaan ini, item khusus satu vihara masih bisa dipakai vihara
      * lain lewat API walau tidak pernah muncul di dropdownnya.
      */
+    /**
+     * Apakah kategori ini punya Nama di master yang berlaku untuk vihara
+     * tersebut. Nama hanya diwajibkan bila memang ada pilihannya (FV-79):
+     * kategori seperti Donasi Belum Teridentifikasi atau Biaya Lainnya tidak
+     * punya daftar nama, dan transaksinya tetap harus bisa dicatat.
+     */
+    public static function adaUntuk(string $type, ?string $category, ?int $viharaId): bool
+    {
+        if ($category === null || $category === '') {
+            return false;
+        }
+
+        return static::query()
+            ->where('active', true)
+            ->where('type', $type)
+            ->where('category', $category)
+            ->where(function ($q) use ($viharaId) {
+                $q->whereNull('vihara_id');
+                if ($viharaId !== null) {
+                    $q->orWhere('vihara_id', $viharaId);
+                }
+            })
+            ->exists();
+    }
+
     public static function usableForVihara(string $type, string $name, int $viharaId): bool
     {
         return static::query()

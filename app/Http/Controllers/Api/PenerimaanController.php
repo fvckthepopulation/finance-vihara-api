@@ -128,7 +128,11 @@ class PenerimaanController extends Controller
                     ->where('active', true),
             ],
             'name' => [
-                'sometimes', 'nullable', 'string', 'max:255',
+                // Wajib untuk transaksi yang langsung diajukan/diposting
+                // (FV-79); draft boleh belum lengkap.
+                Rule::requiredIf(fn () => ! $draft && \App\Models\TransactionName::adaUntuk(
+                    'penerimaan', $request->input('category'), $request->filled('vihara_id') ? $request->integer('vihara_id') : null,
+                )), 'nullable', 'string', 'max:255',
                 // Nama Penerimaan harus terdaftar di master, sesuai kategorinya.
                 Rule::when($request->filled('category'), [
                     Rule::exists('transaction_names', 'name')
@@ -144,6 +148,8 @@ class PenerimaanController extends Controller
             'reference' => ['sometimes', 'nullable', 'string', 'max:100'],
             'amount' => [Rule::requiredIf(! $draft), 'nullable', 'numeric', 'gt:0'],
             'description' => ['sometimes', 'nullable', 'string'],
+        ], [
+            'name.required' => 'Nama Penerimaan wajib dipilih.',
         ]);
 
         $data['vihara_id'] = ViharaScopeService::creationViharaId($request);
@@ -447,10 +453,26 @@ class PenerimaanController extends Controller
     ];
 
     /** @return string[] */
+    /**
+     * Kolom wajib sebelum diajukan/diposting. Nama Penerimaan ikut wajib bila
+     * kategorinya punya pilihan nama di master untuk vihara itu (FV-79).
+     *
+     * @return array<string, string>
+     */
+    private function wajibLengkap(Penerimaan $p): array
+    {
+        $wajib = self::WAJIB_LENGKAP;
+        if (\App\Models\TransactionName::adaUntuk('penerimaan', $p->category, $p->vihara_id)) {
+            $wajib['name'] = 'Nama Penerimaan';
+        }
+
+        return $wajib;
+    }
+
     private function kelengkapanKurang(Penerimaan $p): array
     {
         $kurang = [];
-        foreach (self::WAJIB_LENGKAP as $kolom => $label) {
+        foreach ($this->wajibLengkap($p) as $kolom => $label) {
             if ($p->{$kolom} === null || $p->{$kolom} === '' || $p->{$kolom} == 0) {
                 $kurang[] = $label;
             }
@@ -551,7 +573,7 @@ class PenerimaanController extends Controller
 
     public function submit(Request $request, Penerimaan $penerimaan): JsonResponse
     {
-        return $this->ajukan($request, $penerimaan, 'penerimaan', self::WAJIB_LENGKAP);
+        return $this->ajukan($request, $penerimaan, 'penerimaan', $this->wajibLengkap($penerimaan));
     }
 
     public function reject(Request $request, Penerimaan $penerimaan): JsonResponse

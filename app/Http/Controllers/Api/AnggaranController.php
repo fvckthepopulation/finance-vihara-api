@@ -132,18 +132,28 @@ class AnggaranController extends Controller
             ->selectRaw('category, SUM(amount) AS total')
             ->pluck('total', 'category');
 
-        $realisasiOut = DB::table('pembayaran')
+        // Pengeluaran = Input Pengeluaran + penggunaan Kas Kecil (FV-82):
+        // keduanya memakai master Kategori Biaya & Nama Pengeluaran yang sama.
+        $keluar = DB::table('pembayaran')
             ->where('status', 'posted')
             ->where('vihara_id', $viharaId)
             ->whereBetween('date', $range)
+            ->select('category', 'name', 'amount')
+            ->unionAll(
+                DB::table('petty_cash_movements')
+                    ->where('status', 'posted')
+                    ->where('subtype', 'usage')
+                    ->where('vihara_id', $viharaId)
+                    ->whereBetween('movement_date', $range)
+                    ->select('category', 'name', 'amount'),
+            );
+
+        $realisasiOut = DB::query()->fromSub($keluar, 'k')
             ->groupBy('category')
             ->selectRaw('category, SUM(amount) AS total')
             ->pluck('total', 'category');
 
-        $realisasiDetail = DB::table('pembayaran')
-            ->where('status', 'posted')
-            ->where('vihara_id', $viharaId)
-            ->whereBetween('date', $range)
+        $realisasiDetail = DB::query()->fromSub($keluar, 'k')
             ->whereNotNull('name')
             ->groupBy('category', 'name')
             ->selectRaw('category, name, SUM(amount) AS total')

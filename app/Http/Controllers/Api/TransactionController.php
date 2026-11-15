@@ -187,6 +187,9 @@ class TransactionController extends Controller
             'status' => ['sometimes', 'nullable', 'in:draft,submitted,posted,rejected,cancelled'],
             'submitted_by' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
             'vihara_id' => ['sometimes', 'integer', 'exists:viharas,id'],
+            // Filter yayasan milik laporan sendiri (FV-80), terpisah dari
+            // pemilih vihara di header.
+            'entity_id' => ['sometimes', 'nullable', 'integer', 'exists:entities,id'],
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:200'],
         ]);
@@ -201,6 +204,15 @@ class TransactionController extends Controller
         $viharaIds = ViharaScopeService::readFilterIds($request);
         $tipe = $request->string('tipe')->toString();
         $sumber = $request->string('sumber')->toString();
+
+        // Yayasan di luar jangkauan akun ditolak, bukan dikosongkan diam-diam.
+        if ($entityId = $request->integer('entity_id')) {
+            $user = $request->user();
+            $boleh = $user->isGlobalScope()
+                || (int) ($user->entity_id ?? 0) === $entityId
+                || ViharaScopeService::visibleViharasQuery($user)->where('entity_id', $entityId)->exists();
+            abort_unless($boleh, 403, 'Anda tidak memiliki akses ke yayasan tersebut.');
+        }
 
         $branches = [];
 
@@ -258,6 +270,9 @@ class TransactionController extends Controller
 
         if ($viharaIds !== null) {
             $q->whereIn('vihara_id', $viharaIds);
+        }
+        if ($entityId = $request->integer('entity_id')) {
+            $q->where('entity_id', $entityId);
         }
 
         if ($pengaju = $request->integer('submitted_by')) {

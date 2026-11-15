@@ -174,10 +174,18 @@ class LaporanController extends Controller
 
             foreach ($viharas->get($yys['id'], collect()) as $vihara) {
                 $raw = $this->buildReport(self::filterViharas([(int) $vihara->id]), $startD, $endD, $beforeD)['raw'];
+                // Vihara nonaktif disembunyikan, kecuali masih punya saldo atau
+                // transaksi di periode ini — angkanya tetap harus terhitung
+                // supaya total konsolidasi sama dengan Laporan Keuangan.
+                $nonaktif = ! $vihara->active;
+                if ($nonaktif && ! $this->rawHasValue($raw)) {
+                    continue;
+                }
                 $baris[] = $this->konsolidasiEntry([
                     'id' => (int) $vihara->id,
                     'code' => $vihara->code,
-                    'name' => $vihara->name,
+                    'name' => $vihara->name.($nonaktif ? ' (nonaktif)' : ''),
+                    'nonaktif' => $nonaktif,
                     // Tabel viharas hanya punya `address` (alamat lengkap),
                     // tidak ada kolom kota tersendiri → null.
                     'kota' => null,

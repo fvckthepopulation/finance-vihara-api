@@ -69,11 +69,13 @@ class BaselineEntityCoaSeeder extends Seeder
             // ---- 1. Aset — Aset Lancar Lainnya ----
             ['1300', 'ASET LANCAR LAINNYA',                       'asset',     null,   true,  false, false],
             ['1310', 'Uang Muka Kegiatan',                        'asset',     '1300', false, false, false],
+            ['1320', 'Piutang Antar Yayasan',                     'asset',     '1300', false, true,  false], // FV-66
 
             // ---- 2. Liabilitas ----
             ['2100', 'LIABILITAS JANGKA PENDEK',                  'liability', null,   true,  false, false],
             ['2110', 'Utang Vendor Kegiatan',                     'liability', '2100', false, true,  false],
             ['2310', 'Dana Donasi Belum Teridentifikasi',         'liability', '2100', false, true,  false], // suspense
+            ['2320', 'Utang Antar Yayasan',                       'liability', '2100', false, true,  false], // FV-66
 
             // ---- 3. Aset Neto (ISAK 35) ----
             ['3000', 'ASET NETO',                                 'equity',    null,   true,  false, false],
@@ -90,12 +92,17 @@ class BaselineEntityCoaSeeder extends Seeder
             ['4300', 'DONASI TUNAI LANGSUNG',                     'revenue',   null,   true,  false, false],
             ['4310', 'Donasi Tunai — Tanpa Pembatasan',           'revenue',   '4300', false, true,  false],
             ['4320', 'Donasi Tunai — Dengan Pembatasan',          'revenue',   '4300', false, true,  false],
+            ['4400', 'PENERIMAAN DARI YAYASAN AFILIASI',          'revenue',   null,   true,  true,  false], // FV-66
+            ['4410', 'Penerimaan dari Yayasan Afiliasi — Tanpa Pembatasan', 'revenue', '4400', false, true, false],
+            ['4420', 'Penerimaan dari Yayasan Afiliasi — Dengan Pembatasan', 'revenue', '4400', false, true, false],
 
             // ---- 5. Beban Program / Kegiatan ----
             ['5000', 'BEBAN PROGRAM / KEGIATAN',                  'expense',   null,   true,  false, false],
             ['5100', 'Beban Kegiatan Bhikkhu / Sangha',           'expense',   '5000', false, true,  false],
             ['5200', 'Beban Kegiatan Perayaan',                   'expense',   '5000', false, true,  false],
             ['5300', 'Beban Kegiatan Paramita',                   'expense',   '5000', false, true,  false],
+            // Antar yayasan (P-08, FV-66) — dieliminasi di laporan Grup Konsolidasi.
+            ['5400', 'Penyaluran ke Yayasan Afiliasi',            'expense',   '5000', false, true,  false],
 
             // ---- 6. Beban Administrasi & Umum ----
             ['6000', 'BEBAN OPERASIONAL',                         'expense',   null,   true,  false, false],

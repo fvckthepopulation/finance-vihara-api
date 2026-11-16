@@ -84,6 +84,14 @@ class TransactionController extends Controller
                     ? ($namaPengguna[(int) $row->submitted_by_user_id] ?? null)
                     : null,
                 'submitted_by_user_id' => $row->submitted_by_user_id !== null ? (int) $row->submitted_by_user_id : null,
+                // Pembuat & pemosting — terisi untuk baris jurnal manual (FV-88),
+                // supaya jurnal yang dibuat sekaligus diposting satu orang terlihat.
+                'created_by' => $row->created_by_user_id !== null
+                    ? ($namaPengguna[(int) $row->created_by_user_id] ?? null)
+                    : null,
+                'posted_by' => $row->posted_by_user_id !== null
+                    ? ($namaPengguna[(int) $row->posted_by_user_id] ?? null)
+                    : null,
                 'bank_account_id' => $row->bank_account_id !== null ? (int) $row->bank_account_id : null,
                 'bank_label' => $row->bank_account_id !== null
                     ? ($bankLabels[(int) $row->bank_account_id] ?? null)
@@ -186,6 +194,9 @@ class TransactionController extends Controller
             'sumber' => ['sometimes', 'nullable', 'in:km,manual'],
             'status' => ['sometimes', 'nullable', 'in:draft,submitted,posted,rejected,cancelled'],
             'submitted_by' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
+            // Mode laporan (FV-88): ikut membaca pemakaian kas kecil dan
+            // jurnal manual ke akun pendapatan/beban, hanya untuk status posted.
+            'laporan' => ['sometimes', 'boolean'],
             'vihara_id' => ['sometimes', 'integer', 'exists:viharas,id'],
             // Filter yayasan milik laporan sendiri (FV-80), terpisah dari
             // pemilih vihara di header.
@@ -223,7 +234,8 @@ class TransactionController extends Controller
                 . 'status, source_name AS counterparty, reference, description, vihara_id, bank_account_id, '
                 . 'destination_account_code AS cash_account_code, '
                 . 'CASE WHEN attachment_path IS NULL THEN 0 ELSE 1 END AS has_attachment, '
-                . 'voided_at, void_reason, submitted_at, rejected_at, reject_reason, submitted_by_user_id',
+                . 'voided_at, void_reason, submitted_at, rejected_at, reject_reason, submitted_by_user_id, '
+                . 'NULL::bigint AS created_by_user_id, NULL::bigint AS posted_by_user_id',
             );
             if ($sumber === 'km') {
                 $p->where('method', 'auto_credit');
@@ -239,7 +251,8 @@ class TransactionController extends Controller
                 . "'manual' AS source, status, payee_name AS counterparty, reference, description, vihara_id, bank_account_id, "
                 . 'source_account_code AS cash_account_code, '
                 . 'CASE WHEN attachment_path IS NULL THEN 0 ELSE 1 END AS has_attachment, '
-                . 'voided_at, void_reason, submitted_at, rejected_at, reject_reason, submitted_by_user_id',
+                . 'voided_at, void_reason, submitted_at, rejected_at, reject_reason, submitted_by_user_id, '
+                . 'NULL::bigint AS created_by_user_id, NULL::bigint AS posted_by_user_id',
             );
             if ($sumber === 'km') {
                 // Semua pengeluaran adalah manual — filter km mengosongkan branch ini.
@@ -248,12 +261,92 @@ class TransactionController extends Controller
             $branches[] = $this->applyCommonFilters($b, $request, $viharaIds, 'payee_name');
         }
 
+        // Laporan Penerimaan Dana harus sama dengan buku besar (FV-88): selain
+        // dokumen penerimaan/pengeluaran, buku besar juga memuat pemakaian kas
+        // kecil dan jurnal manual ke akun pendapatan/beban. Hanya untuk yang
+        // terposting — draft keduanya memang belum ada di buku besar.
+        if ($request->boolean('laporan') && $request->string('status')->toString() === 'posted' && $sumber !== 'km') {
+            if ($tipe !== 'Penerimaan') {
+                $branches[] = $this->applyCommonFilters($this->kasKecilBranch(), $request, $viharaIds, 'counterparty');
+            }
+            // Jurnal manual tidak punya Kategori Dana, jadi tidak ikut saat
+            // laporan disaring per kategori.
+            if (! $request->filled('category')) {
+                $jm = $this->jurnalManualBranch();
+                if ($tipe !== '') {
+                    $jm->where('tipe', $tipe);
+                }
+                $branches[] = $this->applyCommonFilters($jm, $request, $viharaIds, 'counterparty');
+            }
+        }
+
         $union = array_shift($branches);
         foreach ($branches as $branch) {
             $union->unionAll($branch);
         }
 
         return DB::query()->fromSub($union, 't');
+    }
+
+    /** Kolom gabungan, urutannya sama dengan cabang penerimaan/pembayaran. */
+    private const KOLOM_GABUNGAN = [
+        'id', 'tipe', 'code', 'date', 'name', 'category', 'amount', 'method', 'source', 'status',
+        'counterparty', 'reference', 'description', 'vihara_id', 'bank_account_id', 'cash_account_code',
+        'has_attachment', 'voided_at', 'void_reason', 'submitted_at', 'rejected_at', 'reject_reason',
+        'submitted_by_user_id', 'created_by_user_id', 'posted_by_user_id',
+    ];
+
+    /**
+     * Pemakaian kas kecil sebagai baris Pengeluaran. Pengisian (refill) tidak
+     * ikut: itu pindah kas, bukan beban.
+     */
+    private function kasKecilBranch(): Builder
+    {
+        $dalam = DB::table('petty_cash_movements')->selectRaw(
+            "id, entity_id, 'Pengeluaran' AS tipe, 'KK-' || id AS code, movement_date AS date, name, category, amount, "
+            . "'tunai' AS method, 'kas_kecil' AS source, status, recipient AS counterparty, reference, description, "
+            . 'vihara_id, NULL::bigint AS bank_account_id, cash_account_code, '
+            . 'CASE WHEN attachment_path IS NULL THEN 0 ELSE 1 END AS has_attachment, '
+            . 'voided_at, void_reason, NULL::timestamp AS submitted_at, NULL::timestamp AS rejected_at, '
+            . 'NULL::text AS reject_reason, NULL::bigint AS submitted_by_user_id, '
+            . 'created_by_user_id, NULL::bigint AS posted_by_user_id',
+        )->where('type', 'expense')->whereNull('voided_at');
+
+        return DB::query()->fromSub($dalam, 'kk')->select(self::KOLOM_GABUNGAN);
+    }
+
+    /**
+     * Jurnal manual terposting ke akun pendapatan/beban — satu baris per baris
+     * jurnal. Pendapatan → Penerimaan (kredit − debit), beban → Pengeluaran
+     * (debit − kredit). Jurnal yang dibatalkan beserta pembaliknya
+     * (reference_type manual_void) tidak ikut.
+     */
+    private function jurnalManualBranch(): Builder
+    {
+        // COA umumnya global; ambil satu jenis & nama per kode supaya baris
+        // jurnal tidak terhitung dobel bila ada akun khusus yayasan.
+        $akun = DB::table('accounts')->selectRaw('code, MIN(type) AS type, MIN(name) AS name')->groupBy('code');
+
+        $dalam = DB::table('journal_lines as l')
+            ->join('journal_entries as je', 'je.id', '=', 'l.journal_entry_id')
+            ->joinSub($akun, 'a', 'a.code', '=', 'l.account_code')
+            ->selectRaw(
+                "je.id, je.entity_id, CASE WHEN a.type = 'revenue' THEN 'Penerimaan' ELSE 'Pengeluaran' END AS tipe, "
+                . "'JE-' || je.id AS code, je.entry_date AS date, l.account_code || ' ' || a.name AS name, "
+                . "'jurnal_manual' AS category, "
+                . "CASE WHEN a.type = 'revenue' THEN l.credit - l.debit ELSE l.debit - l.credit END AS amount, "
+                . "'jurnal' AS method, 'jurnal_manual' AS source, 'posted' AS status, NULL::text AS counterparty, "
+                . 'je.reference, je.description, je.vihara_id, NULL::bigint AS bank_account_id, '
+                . 'NULL::text AS cash_account_code, 0 AS has_attachment, je.voided_at, je.void_reason, '
+                . 'je.submitted_at, je.rejected_at, je.reject_reason, je.submitted_by_user_id, '
+                . 'je.created_by_user_id, je.posted_by_user_id',
+            )
+            ->where('je.reference_type', 'manual')
+            ->whereNotNull('je.posted_at')
+            ->whereNull('je.voided_at')
+            ->whereIn('a.type', ['revenue', 'expense']);
+
+        return DB::query()->fromSub($dalam, 'jm')->select(self::KOLOM_GABUNGAN);
     }
 
     private function applyCommonFilters(Builder $q, Request $request, ?array $viharaIds, string $counterpartyColumn): Builder

@@ -312,6 +312,15 @@ Route::middleware(['auth:sanctum', 'user.aktif'])->group(function () {
     // aksesnya diatur terpisah dari laporan per vihara. Jangkauan tingkat
     // yayasan tetap diperiksa di controller (vihara-scope ditolak 403).
     Route::get('/laporan/konsolidasi', [LaporanController::class, 'konsolidasi'])->middleware('can:konsolidasi.view');
+    // Grup Konsolidasi (FV-66): laporan grup dengan eliminasi antar yayasan,
+    // dan masternya (anggota + periode + akses user).
+    Route::get('/laporan/konsolidasi-grup', [LaporanController::class, 'konsolidasiGrup'])->middleware('can:konsolidasi.view');
+    Route::get('/konsolidasi-groups', [\App\Http\Controllers\Api\KonsolidasiGroupController::class, 'index'])->middleware('can:konsolidasi.view');
+    Route::middleware('can:entities.manage')->group(function () {
+        Route::post('/konsolidasi-groups', [\App\Http\Controllers\Api\KonsolidasiGroupController::class, 'store']);
+        Route::put('/konsolidasi-groups/{konsolidasiGroup}', [\App\Http\Controllers\Api\KonsolidasiGroupController::class, 'update']);
+        Route::delete('/konsolidasi-groups/{konsolidasiGroup}', [\App\Http\Controllers\Api\KonsolidasiGroupController::class, 'destroy']);
+    });
     Route::get('/laporan/isak35', [LaporanController::class, 'isak35'])->middleware('can:reports.pl.view');
     Route::get('/anggaran', [AnggaranController::class, 'index'])->middleware('can:anggaran.view');
     Route::put('/anggaran', [AnggaranController::class, 'upsert'])->middleware('can:anggaran.manage');

@@ -254,6 +254,190 @@ class LaporanController extends Controller
         ]);
     }
 
+    /** Akun antar yayasan yang dieliminasi di laporan grup (P-08, FV-66). */
+    private const AKUN_PENYALURAN = '5400';
+    private const AKUN_PENERIMAAN_AFILIASI = ['4410', '4420'];
+    private const AKUN_PIUTANG_AFILIASI = '1320';
+    private const AKUN_UTANG_AFILIASI = '2320';
+
+    /**
+     * Konsolidasi satu Grup Konsolidasi (FV-66): kolom per yayasan anggota,
+     * kolom Eliminasi, dan Total Grup.
+     *
+     * - Tiap anggota dihitung untuk irisan periode laporan dengan periode
+     *   keanggotaannya (YP keluar 1/7 → Jan–Jun ikut, Jul dst. tidak).
+     * - Kolom yayasan = Laporan Keuangan yayasan itu (tanpa eliminasi).
+     * - Eliminasi: 5400 pemberi ↔ 4410/4420 penerima, 1320 ↔ 2320. Hanya
+     *   bagian yang cocok yang dieliminasi; sisanya jadi peringatan
+     *   "Transaksi antar yayasan belum seimbang" beserta daftar jurnalnya.
+     * - Total Grup = Σ yayasan + Eliminasi (eliminasi bernilai negatif).
+     */
+    public function konsolidasiGrup(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user->canSeeYayasanLevel()) {
+            return response()->json(['message' => 'Konsolidasi hanya untuk akses tingkat yayasan.'], 403);
+        }
+
+        $data = $request->validate([
+            'group_id' => ['required', 'integer', 'exists:konsolidasi_groups,id'],
+            'mode' => ['sometimes', 'in:ytd,bulan'],
+            'year' => ['sometimes', 'integer', 'min:2000', 'max:2100'],
+            'month' => ['required_if:mode,bulan', 'integer', 'min:1', 'max:12'],
+        ]);
+        $grup = \App\Models\KonsolidasiGroup::untukUser($user)->with('members.entity')->find($data['group_id']);
+        if ($grup === null) {
+            return response()->json(['message' => 'Anda tidak memiliki akses ke grup konsolidasi tersebut.'], 403);
+        }
+
+        [$mode, $year, $month, $startD, $endD] = $this->resolvePeriod($data);
+
+        $anggota = [];
+        $jendela = []; // entity_id → [mulai, selesai] irisan periode
+        $total = null;
+        foreach ($grup->members as $m) {
+            $mulai = max($startD, $m->start_date->toDateString());
+            $selesai = min($endD, $m->end_date?->toDateString() ?? $endD);
+            if ($mulai > $selesai) {
+                continue; // bukan anggota pada periode ini
+            }
+            $sebelum = CarbonImmutable::parse($mulai)->subDay()->toDateString();
+            $viharaIds = Vihara::query()->where('entity_id', $m->entity_id)->pluck('id')->map(fn ($v) => (int) $v)->all();
+            $raw = $this->buildReport(self::filterViharas($viharaIds, true, (int) $m->entity_id), $mulai, $selesai, $sebelum)['raw'];
+
+            $jendela[(int) $m->entity_id] = [$mulai, $selesai];
+            $anggota[] = [
+                'yayasan' => ['id' => (int) $m->entity_id, 'code' => $m->entity->code, 'nama' => $m->entity->legal_name],
+                'periode' => ['start' => $mulai, 'end' => $selesai],
+                'raw' => $raw,
+            ];
+            $total = $this->accumulateRaw($total, $raw);
+        }
+
+        [$eliminasi, $peringatan] = $this->eliminasiGrup($jendela);
+        $totalGrup = $total === null ? null : $this->accumulateRaw($total, $eliminasi);
+
+        return response()->json([
+            'period' => ['mode' => $mode, 'year' => $year, 'month' => $month, 'start' => $startD, 'end' => $endD],
+            'grup' => ['id' => $grup->id, 'nama' => $grup->name],
+            'anggota' => array_map(fn ($a) => [
+                'yayasan' => $a['yayasan'],
+                'periode' => $a['periode'],
+                'entry' => $this->konsolidasiEntry(null, $a['raw']),
+            ], $anggota),
+            'eliminasi' => $this->konsolidasiEntry(null, $eliminasi),
+            'total' => $totalGrup === null ? null : $this->konsolidasiEntry(null, $totalGrup),
+            'peringatan' => $peringatan,
+        ]);
+    }
+
+    /**
+     * Angka eliminasi (raw, bernilai negatif) + peringatan bila belum seimbang.
+     *
+     * @param  array<int, array{0: string, 1: string}>  $jendela
+     * @return array{0: array<string, float>, 1: list<array<string, mixed>>}
+     */
+    private function eliminasiGrup(array $jendela): array
+    {
+        $kosong = array_fill_keys([
+            'pendapatan_tp', 'pendapatan_dp', 'beban_program', 'beban_admin', 'beban_fundraising',
+            'kenaikan_tp', 'kenaikan_dp', 'kas_setara', 'pg_clearing', 'aset_lainnya',
+            'rekonsiliasi_sementara', 'total_aset', 'liabilitas', 'aset_neto_tp', 'aset_neto_dp',
+            'selisih', 'arus_kas_bersih',
+        ], 0.0);
+        if ($jendela === []) {
+            return [$kosong, []];
+        }
+
+        $akun = array_merge([self::AKUN_PENYALURAN], self::AKUN_PENERIMAAN_AFILIASI);
+        $saldoAkun = [self::AKUN_PIUTANG_AFILIASI, self::AKUN_UTANG_AFILIASI];
+
+        // Mutasi periode (pendapatan/beban) dan saldo akhir (piutang/utang)
+        // per anggota, masing-masing dalam jendela keanggotaannya.
+        $mutasi = array_fill_keys($akun, 0.0);
+        $saldo = array_fill_keys($saldoAkun, 0.0);
+        $baris = [];
+        foreach ($jendela as $entityId => [$mulai, $selesai]) {
+            $q = DB::table('journal_lines as jl')
+                ->join('journal_entries as je', 'je.id', '=', 'jl.journal_entry_id')
+                ->whereNotNull('je.posted_at')
+                ->where('je.entity_id', $entityId);
+            foreach ((clone $q)->whereIn('jl.account_code', $akun)->whereBetween('je.entry_date', [$mulai, $selesai])
+                ->groupBy('jl.account_code')->selectRaw('jl.account_code AS code, SUM(jl.debit - jl.credit) AS net')->get() as $r) {
+                $mutasi[$r->code] += (float) $r->net;
+            }
+            foreach ((clone $q)->whereIn('jl.account_code', $saldoAkun)->where('je.entry_date', '<=', $selesai)
+                ->groupBy('jl.account_code')->selectRaw('jl.account_code AS code, SUM(jl.debit - jl.credit) AS net')->get() as $r) {
+                $saldo[$r->code] += (float) $r->net;
+            }
+            foreach ((clone $q)->whereIn('jl.account_code', array_merge($akun, $saldoAkun))
+                ->where('je.entry_date', '<=', $selesai)
+                ->where(fn ($w) => $w->whereIn('jl.account_code', $saldoAkun)->orWhere('je.entry_date', '>=', $mulai))
+                ->orderBy('je.entry_date')
+                ->get(['je.id', 'je.entity_id', 'je.entry_date', 'je.description', 'jl.account_code', 'jl.debit', 'jl.credit']) as $r) {
+                $baris[] = [
+                    'journal_entry_id' => (int) $r->id,
+                    'code' => 'JE-'.$r->id,
+                    'entity_id' => (int) $r->entity_id,
+                    'tanggal' => (string) $r->entry_date,
+                    'deskripsi' => $r->description,
+                    'akun' => $r->account_code,
+                    'debit' => $this->fmt((float) $r->debit),
+                    'kredit' => $this->fmt((float) $r->credit),
+                ];
+            }
+        }
+
+        $penyaluran = $mutasi[self::AKUN_PENYALURAN];             // debit-normal
+        $terimaTp = -$mutasi[self::AKUN_PENERIMAAN_AFILIASI[0]];  // kredit-normal
+        $terimaDp = -$mutasi[self::AKUN_PENERIMAAN_AFILIASI[1]];
+        $terima = $terimaTp + $terimaDp;
+        $cocok = max(0.0, min($penyaluran, $terima));
+        // Bagian penerimaan yang dieliminasi dibagi TP/DP sebanding.
+        $elimTp = $terima > 0 ? $cocok * ($terimaTp / $terima) : 0.0;
+        $elimDp = $cocok - $elimTp;
+
+        $piutang = $saldo[self::AKUN_PIUTANG_AFILIASI];
+        $utang = -$saldo[self::AKUN_UTANG_AFILIASI];
+        $cocokPu = max(0.0, min($piutang, $utang));
+
+        $e = $kosong;
+        $e['pendapatan_tp'] = -$elimTp;
+        $e['pendapatan_dp'] = -$elimDp;
+        $e['beban_program'] = -$cocok; // 5400 di bawah 5000 (program)
+        // Pendapatan & beban yang sama besar hilang bersamaan: total aset neto
+        // grup tetap; yang bergeser hanya komposisi TP/DP.
+        $e['kenaikan_tp'] = -$elimTp + $cocok;
+        $e['kenaikan_dp'] = -$elimDp;
+        $e['aset_neto_tp'] = $e['kenaikan_tp'];
+        $e['aset_neto_dp'] = $e['kenaikan_dp'];
+        $e['aset_lainnya'] = -$cocokPu; // 1320 = 13xx
+        $e['total_aset'] = -$cocokPu;
+        $e['liabilitas'] = -$cocokPu;
+
+        $peringatan = [];
+        if (abs($penyaluran - $terima) >= 0.005) {
+            $peringatan[] = [
+                'jenis' => 'penyaluran',
+                'pesan' => 'Transaksi antar yayasan belum seimbang: penyaluran (5400) '.$this->fmt($penyaluran)
+                    .' ≠ penerimaan dari yayasan afiliasi (4410/4420) '.$this->fmt($terima).'.',
+                'selisih' => $this->fmt($penyaluran - $terima),
+                'transaksi' => array_values(array_filter($baris, fn ($b) => in_array($b['akun'], $akun, true))),
+            ];
+        }
+        if (abs($piutang - $utang) >= 0.005) {
+            $peringatan[] = [
+                'jenis' => 'piutang_utang',
+                'pesan' => 'Transaksi antar yayasan belum seimbang: piutang (1320) '.$this->fmt($piutang)
+                    .' ≠ utang antar yayasan (2320) '.$this->fmt($utang).'.',
+                'selisih' => $this->fmt($piutang - $utang),
+                'transaksi' => array_values(array_filter($baris, fn ($b) => in_array($b['akun'], $saldoAkun, true))),
+            ];
+        }
+
+        return [$e, $peringatan];
+    }
+
     /**
      * Parse mode/year/month tervalidasi → [mode, year, month, start, end,
      * before] (tanggal string; before = sehari sebelum start, batas saldo

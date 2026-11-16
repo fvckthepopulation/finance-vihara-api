@@ -296,8 +296,8 @@ class ManualJournalController extends Controller
     {
         $data = $request->validate([
             'entity_id' => ['required', 'exists:entities,id'],
-            // Dimensi vihara opsional — user ter-scope dipaksa ke vihara-nya;
-            // superadmin boleh kosong (= jurnal level yayasan).
+            // Vihara wajib (FV-64): transaksi pusat yayasan dicatat di unit
+            // "Umum/Pusat Yayasan", bukan sebagai jurnal tanpa vihara.
             'vihara_id' => ['sometimes', 'nullable', 'integer', 'exists:viharas,id'],
             'entry_date' => ['required', 'date'],
             'description' => ['required', 'string', 'max:255'],
@@ -314,6 +314,22 @@ class ManualJournalController extends Controller
         // dijaga optionalCreationViharaId (FV-35).
         ViharaScopeService::guardEntity($request, (int) $data['entity_id']);
         $data['vihara_id'] = ViharaScopeService::optionalCreationViharaId($request);
+
+        // Satu tempat untuk transaksi pusat yayasan: unit Umum/Pusat (FV-64).
+        // Jurnal tanpa vihara dulu muncul sebagai baris "Kantor Yayasan"
+        // terpisah dari unit Umum, sehingga angka pusat terpecah dua.
+        if ($data['vihara_id'] === null) {
+            return response()->json([
+                'message' => 'Vihara wajib dipilih.',
+                'errors' => ['vihara_id' => ['Vihara wajib dipilih. Transaksi pusat yayasan dicatat di unit Umum/Pusat Yayasan.']],
+            ], 422);
+        }
+        if ((int) \App\Models\Vihara::whereKey($data['vihara_id'])->value('entity_id') !== (int) $data['entity_id']) {
+            return response()->json([
+                'message' => 'Vihara yang dipilih bukan milik yayasan yang disebut.',
+                'errors' => ['vihara_id' => ['Vihara yang dipilih bukan milik yayasan yang disebut.']],
+            ], 422);
+        }
 
         PeriodLockService::guard($data['entity_id'], $data['entry_date'], 'entry_date');
 

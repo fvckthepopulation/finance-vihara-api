@@ -34,10 +34,13 @@ class TransferRekeningController extends Controller
             'to_bank_account_id' => ['required', 'integer', 'different:from_bank_account_id', 'exists:vihara_bank_accounts,id'],
             'date' => ['required', 'date'],
             'amount' => ['required', 'numeric', 'gt:0'],
-            'vihara_id' => ['sometimes', 'nullable', 'integer', 'exists:viharas,id'],
+            // Wajib (FV-64): tidak ada lagi transaksi tanpa vihara; transfer
+            // pusat yayasan dicatat di unit Umum/Pusat Yayasan.
+            'vihara_id' => ['required', 'integer', 'exists:viharas,id'],
             'description' => ['sometimes', 'nullable', 'string', 'max:255'],
         ], [
             'to_bank_account_id.different' => 'Rekening asal dan tujuan tidak boleh sama.',
+            'vihara_id.required' => 'Vihara wajib dipilih.',
         ]);
 
         $asal = ViharaBankAccount::findOrFail($data['from_bank_account_id']);
@@ -61,17 +64,15 @@ class TransferRekeningController extends Controller
             ], 422);
         }
 
-        // Vihara transaksi: boleh kosong (tingkat yayasan). Kalau diisi,
-        // harus vihara yang memang boleh memakai kedua rekening itu.
-        $viharaId = $data['vihara_id'] ?? null;
-        if ($viharaId !== null) {
-            ViharaScopeService::guardRecord($request, $viharaId);
-            foreach ([$asal, $tujuan] as $rek) {
-                if (! $rek->bolehDipakaiVihara((int) $viharaId)) {
-                    return response()->json([
-                        'message' => 'Rekening ini tidak boleh dipakai vihara yang dipilih.',
-                    ], 422);
-                }
+        // Vihara transaksi harus vihara yang memang boleh memakai kedua
+        // rekening itu.
+        $viharaId = (int) $data['vihara_id'];
+        ViharaScopeService::guardRecord($request, $viharaId);
+        foreach ([$asal, $tujuan] as $rek) {
+            if (! $rek->bolehDipakaiVihara($viharaId)) {
+                return response()->json([
+                    'message' => 'Rekening ini tidak boleh dipakai vihara yang dipilih.',
+                ], 422);
             }
         }
 

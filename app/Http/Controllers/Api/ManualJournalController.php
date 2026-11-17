@@ -49,6 +49,12 @@ class ManualJournalController extends Controller
         if ($entityId = $request->integer('entity_id')) {
             $q->where('entity_id', $entityId);
         }
+        // Filter akun COA: jurnal yang punya baris di akun ini. Jurnalnya
+        // tetap tampil utuh (semua baris), supaya akun lawannya terlihat.
+        $akun = $request->string('account_code')->toString();
+        if ($akun !== '') {
+            $q->whereHas('lines', fn ($l) => $l->where('account_code', $akun));
+        }
         if ($from = $request->string('from')->toString()) {
             $q->whereDate('entry_date', '>=', $from);
         }
@@ -66,6 +72,25 @@ class ManualJournalController extends Controller
             });
         }
 
+        // Mutasi akun yang difilter di seluruh hasil saringan (bukan hanya
+        // halaman ini), dari jurnal terposting saja. Jurnal batal ikut
+        // dihitung karena pembaliknya juga terposting, jadi netonya nol.
+        $ringkasanAkun = null;
+        if ($akun !== '') {
+            $mutasi = DB::table('journal_lines')
+                ->whereIn('journal_entry_id', (clone $q)->reorder()->whereNotNull('posted_at')->select('id'))
+                ->where('account_code', $akun)
+                ->selectRaw('COALESCE(SUM(debit), 0) AS debit, COALESCE(SUM(credit), 0) AS kredit')
+                ->first();
+            $ringkasanAkun = [
+                'account_code' => $akun,
+                'name' => Account::where('code', $akun)->value('name'),
+                'debit' => number_format((float) $mutasi->debit, 2, '.', ''),
+                'kredit' => number_format((float) $mutasi->kredit, 2, '.', ''),
+                'saldo' => number_format((float) $mutasi->debit - (float) $mutasi->kredit, 2, '.', ''),
+            ];
+        }
+
         $perPage = max(1, min(100, (int) $request->integer('per_page', 20)));
         $halaman = $q->paginate($perPage);
 
@@ -79,7 +104,7 @@ class ManualJournalController extends Controller
         // terbantu tanpa menulis ulang catatan buku besar.
         $halaman->through(fn ($j) => $j->setAttribute('source', $this->ringkasanSumber($j)));
 
-        return response()->json($halaman);
+        return response()->json($halaman->toArray() + ['ringkasan_akun' => $ringkasanAkun]);
     }
 
     public function show(Request $request, JournalEntry $journalEntry): JsonResponse

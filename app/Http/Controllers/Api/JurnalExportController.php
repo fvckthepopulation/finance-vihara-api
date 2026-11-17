@@ -48,6 +48,7 @@ class JurnalExportController extends Controller
             'to' => ['sometimes', 'nullable', 'date'],
             'q' => ['sometimes', 'nullable', 'string', 'max:255'],
             'vihara_id' => ['sometimes', 'nullable', 'integer', 'exists:viharas,id'],
+            'account_code' => ['sometimes', 'nullable', 'string', 'max:20'],
         ]);
 
         $baris = $this->barisJurnal($request);
@@ -109,6 +110,12 @@ class JurnalExportController extends Controller
         }
         if ($source = $request->string('source')->toString()) {
             $q->where('je.reference_type', $source);
+        }
+        // Filter akun COA: jurnal yang punya baris di akun ini, dicetak utuh
+        // (semua barisnya) seperti di layar.
+        if ($akun = $request->string('account_code')->toString()) {
+            $q->whereExists(fn ($w) => $w->selectRaw('1')->from('journal_lines as jf')
+                ->whereColumn('jf.journal_entry_id', 'je.id')->where('jf.account_code', $akun));
         }
         if ($status = $request->string('status')->toString()) {
             $q->where('je.status', $status);
@@ -249,6 +256,7 @@ class JurnalExportController extends Controller
             ['Jurnal Umum', ''],
             ['Lingkup', $this->keteranganLingkup($request)],
             ['Periode', $this->keteranganPeriode($request)],
+            ['Akun', ($k = $request->string('account_code')->toString()) !== '' ? $k.' '.(Account::where('code', $k)->value('name') ?? '').' (jurnal yang memuat akun ini, ditampilkan utuh)' : 'Semua akun'],
             ['Diunduh', now()->format('d/m/Y H:i').' oleh '.($request->user()->name ?? '-')],
             ['Jumlah baris', (string) $jumlahBaris],
             ['Catatan', $bukanPosted > 0
@@ -339,6 +347,8 @@ class JurnalExportController extends Controller
         $from = $request->string('from')->toString() ?: 'awal';
         $to = $request->string('to')->toString() ?: now()->toDateString();
 
-        return "Jurnal_{$vihara}_{$from}_sd_{$to}.xlsx";
+        $akun = $request->string('account_code')->toString();
+
+        return "Jurnal_{$vihara}".($akun !== '' ? "_akun{$akun}" : '')."_{$from}_sd_{$to}.xlsx";
     }
 }

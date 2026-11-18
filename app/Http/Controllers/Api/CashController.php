@@ -30,6 +30,8 @@ class CashController extends Controller
         $journalQuery = JournalLine::query()
             ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
             ->where('journal_entries.entry_date', '<=', $asOf)
+            // Hanya jurnal terposting: draft & jurnal ditolak belum masuk buku besar.
+            ->whereNotNull('journal_entries.posted_at')
             ->tap(fn ($q) => ViharaScopeService::applyScope($q, $request, 'journal_entries.vihara_id', true))
             ->groupBy('journal_lines.account_code')
             ->select(
@@ -82,6 +84,8 @@ class CashController extends Controller
             ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
             ->where('journal_lines.account_code', $accountCode)
             ->where('journal_entries.entry_date', '<', $start)
+            // Hanya jurnal terposting: draft & jurnal ditolak belum masuk buku besar.
+            ->whereNotNull('journal_entries.posted_at')
             ->tap(fn ($q) => ViharaScopeService::applyScope($q, $request, 'journal_entries.vihara_id', true))
             ->selectRaw('COALESCE(SUM(debit) - SUM(credit), 0) as balance')
             ->value('balance');
@@ -90,6 +94,8 @@ class CashController extends Controller
             ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
             ->where('journal_lines.account_code', $accountCode)
             ->whereBetween('journal_entries.entry_date', [$start, $end])
+            // Hanya jurnal terposting: draft & jurnal ditolak belum masuk buku besar.
+            ->whereNotNull('journal_entries.posted_at')
             ->tap(fn ($q) => ViharaScopeService::applyScope($q, $request, 'journal_entries.vihara_id', true))
             ->orderBy('journal_entries.entry_date')
             ->orderBy('journal_lines.id')

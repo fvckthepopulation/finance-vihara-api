@@ -67,7 +67,7 @@ class KmReportController extends Controller
         $this->resolveScope($request);
 
         $asOf = $request->string('as_of')->toString() ?: now()->toDateString();
-        $status = $request->string('status')->toString() ?: 'posted';
+        $status = 'posted'; // draft & ditolak tidak pernah masuk laporan
 
         $assets       = $this->aggregateAsOf('1', $asOf, $status, credit: false);
         $liabilities  = $this->aggregateAsOf('2', $asOf, $status, credit: true);
@@ -111,15 +111,17 @@ class KmReportController extends Controller
         $this->resolveScope($request);
 
         $asOf = $request->string('as_of')->toString() ?: now()->toDateString();
-        $status = $request->string('status')->toString() ?: 'posted';
+        $status = 'posted'; // draft & ditolak tidak pernah masuk laporan
 
         $q = JournalLine::query()
             ->join('journal_entries', 'journal_lines.journal_entry_id', '=', 'journal_entries.id')
             ->tap(fn ($qq) => $this->scopeJournal($qq))
             ->whereDate('journal_entries.entry_date', '<=', $asOf);
-        if ($status === 'posted') {
-            $q->where('journal_entries.status', 'posted');
-        }
+        // Selalu jurnal terposting (posted_at), apa pun parameter status:
+        // draft & ditolak tidak boleh masuk laporan. posted_at, bukan
+        // status='posted', supaya jurnal yang dibatalkan (status cancelled)
+        // tetap terhitung bersama pembaliknya dan saling meniadakan.
+        $q->whereNotNull('journal_entries.posted_at');
         $rows = $q
             ->selectRaw('account_code, SUM(debit) as total_debit, SUM(credit) as total_credit')
             ->groupBy('account_code')
@@ -234,7 +236,7 @@ class KmReportController extends Controller
     {
         $from = $request->string('from')->toString() ?: now()->startOfMonth()->toDateString();
         $to   = $request->string('to')->toString() ?: now()->toDateString();
-        $status = $request->string('status')->toString() ?: 'posted';
+        $status = 'posted'; // draft & ditolak tidak pernah masuk laporan
         return [$from, $to, $status];
     }
 
@@ -249,9 +251,11 @@ class KmReportController extends Controller
             ->tap(fn ($qq) => $this->scopeJournal($qq))
             ->where('journal_lines.account_code', 'like', "{$prefix}%")
             ->whereBetween('journal_entries.entry_date', [$from, $to]);
-        if ($status === 'posted') {
-            $q->where('journal_entries.status', 'posted');
-        }
+        // Selalu jurnal terposting (posted_at), apa pun parameter status:
+        // draft & ditolak tidak boleh masuk laporan. posted_at, bukan
+        // status='posted', supaya jurnal yang dibatalkan (status cancelled)
+        // tetap terhitung bersama pembaliknya dan saling meniadakan.
+        $q->whereNotNull('journal_entries.posted_at');
         $rows = $q
             ->selectRaw('account_code, SUM(debit) as td, SUM(credit) as tc')
             ->groupBy('account_code')
@@ -281,9 +285,11 @@ class KmReportController extends Controller
             ->tap(fn ($qq) => $this->scopeJournal($qq))
             ->whereIn('journal_lines.account_code', $codes)
             ->whereBetween('journal_entries.entry_date', [$from, $to]);
-        if ($status === 'posted') {
-            $q->where('journal_entries.status', 'posted');
-        }
+        // Selalu jurnal terposting (posted_at), apa pun parameter status:
+        // draft & ditolak tidak boleh masuk laporan. posted_at, bukan
+        // status='posted', supaya jurnal yang dibatalkan (status cancelled)
+        // tetap terhitung bersama pembaliknya dan saling meniadakan.
+        $q->whereNotNull('journal_entries.posted_at');
         $rows = $q
             ->selectRaw('account_code, SUM(debit) as td, SUM(credit) as tc')
             ->groupBy('account_code')
@@ -312,9 +318,11 @@ class KmReportController extends Controller
             ->tap(fn ($qq) => $this->scopeJournal($qq))
             ->where('journal_lines.account_code', 'like', "{$prefix}%")
             ->whereDate('journal_entries.entry_date', '<=', $asOf);
-        if ($status === 'posted') {
-            $q->where('journal_entries.status', 'posted');
-        }
+        // Selalu jurnal terposting (posted_at), apa pun parameter status:
+        // draft & ditolak tidak boleh masuk laporan. posted_at, bukan
+        // status='posted', supaya jurnal yang dibatalkan (status cancelled)
+        // tetap terhitung bersama pembaliknya dan saling meniadakan.
+        $q->whereNotNull('journal_entries.posted_at');
         $rows = $q
             ->selectRaw('account_code, SUM(debit) as td, SUM(credit) as tc')
             ->groupBy('account_code')
@@ -356,9 +364,11 @@ class KmReportController extends Controller
             ->tap(fn ($qq) => $this->scopeJournal($qq))
             ->where('journal_lines.account_code', 'like', '7%')
             ->whereBetween('journal_entries.entry_date', [$from, $to]);
-        if ($status === 'posted') {
-            $q->where('journal_entries.status', 'posted');
-        }
+        // Selalu jurnal terposting (posted_at), apa pun parameter status:
+        // draft & ditolak tidak boleh masuk laporan. posted_at, bukan
+        // status='posted', supaya jurnal yang dibatalkan (status cancelled)
+        // tetap terhitung bersama pembaliknya dan saling meniadakan.
+        $q->whereNotNull('journal_entries.posted_at');
         return $q
             ->selectRaw("to_char(journal_entries.entry_date, 'YYYY-MM') as month, SUM(debit - credit) as total")
             ->groupBy('month')
